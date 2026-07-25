@@ -1,0 +1,14 @@
+{
+  "name": "TO-WORD — build the tower, obey the decree",
+  "short_name": "TO-WORD",
+  "description": "Co-op word tower for 1–4 players. Stack real 5-letter words under an escalating decree. Room-code multiplayer, no accounts.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,743 @@
+/* TO-WORD — ink on paper, courier, and one tower rendered in real CSS 3D.
+   Two themes, both first-class: `light` (black on white, the default) and
+   `dark` (white on black). Everything below is driven off the token block;
+   nothing hard-codes a color outside it. */
+
+:root,
+:root[data-theme='light'] {
+  --paper: #ffffff;
+  --ink: #0e0e0e;
+  --ink-2: rgba(14, 14, 14, 0.60);
+  --ink-3: rgba(14, 14, 14, 0.32);
+  --rule: rgba(14, 14, 14, 0.18);
+  --rule-soft: rgba(14, 14, 14, 0.09);
+  --face-top: #f2f2f2;
+  --face-side: #d8d8d8;
+  --sheen: rgba(14, 14, 14, 0.05);
+  --g: #146c40;
+  --y: #9a6c05;
+  --x: rgba(14, 14, 14, 0.30);
+  --on-fill: #ffffff;
+  --shadow: rgba(14, 14, 14, 0.18);
+}
+
+:root[data-theme='dark'] {
+  --paper: #080808;
+  --ink: #f3f1ec;
+  --ink-2: rgba(243, 241, 236, 0.62);
+  --ink-3: rgba(243, 241, 236, 0.34);
+  --rule: rgba(243, 241, 236, 0.22);
+  --rule-soft: rgba(243, 241, 236, 0.10);
+  --face-top: #1d1d1d;
+  --face-side: #131313;
+  --sheen: rgba(243, 241, 236, 0.06);
+  --g: #35c07a;
+  --y: #d9a52a;
+  --x: rgba(243, 241, 236, 0.26);
+  --on-fill: #080808;
+  --shadow: rgba(0, 0, 0, 0.6);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Courier New', Courier, 'Nimbus Mono PS', monospace;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+body { transition: background .28s ease, color .28s ease; }
+
+#app {
+  /* exactly one viewport tall: the game screen is a rigid, non-scrolling
+     layout, so the keyboard can never drift as the tower or HUD changes */
+  height: 100%;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top) .75rem calc(.5rem + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hidden { display: none !important; }
+
+.screen {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .85rem;
+  padding: 1rem 0;
+  animation: screen-in .26s cubic-bezier(.2, .9, .25, 1) both;
+}
+@keyframes screen-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- typographic furniture ---------- */
+.slug {
+  font-size: .68rem;
+  letter-spacing: .22em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  align-self: flex-start;
+  border-bottom: 1px solid var(--rule-soft);
+  width: 100%;
+  padding-bottom: .35rem;
+}
+
+.mono-line { font-size: .9rem; color: var(--ink-2); letter-spacing: .05em; text-align: center; }
+
+.big-title {
+  margin: 1.2rem 0 0;
+  display: flex;
+  gap: .04em;
+  font-size: clamp(2.1rem, 12vw, 3.4rem);
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.title-glyph {
+  display: inline-block;
+  animation: glyph-set .5s cubic-bezier(.2, .9, .25, 1) both;
+}
+.title-dash { color: var(--ink-3); }
+@keyframes glyph-set {
+  from { opacity: 0; transform: translateY(-.5em) rotate(-8deg); }
+}
+
+.tagline { margin: 0; color: var(--ink-2); font-size: .82rem; letter-spacing: .06em; text-align: center; }
+.credits { margin-top: auto; color: var(--ink-3); font-size: .66rem; letter-spacing: .1em; text-align: center; }
+
+/* ---------- controls ---------- */
+input, button { font-family: inherit; color: inherit; }
+
+.menu-box { width: 100%; display: flex; flex-direction: column; gap: .55rem; margin-top: .6rem; }
+.join-row { display: flex; gap: .55rem; }
+.join-row #inp-code { flex: 1; text-align: center; letter-spacing: .45em; }
+.join-row .btn-big { width: 8.5rem; }
+
+#inp-name, #inp-code {
+  width: 100%;
+  padding: .8rem .7rem;
+  font-size: 1rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+#inp-name:focus, #inp-code:focus { border-color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+#inp-name::placeholder, #inp-code::placeholder { color: var(--ink-3); }
+
+.btn-big {
+  padding: .85rem 1rem;
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  cursor: pointer;
+  transition: transform .13s cubic-bezier(.2, .9, .25, 1), opacity .15s ease, background .15s ease, color .15s ease;
+}
+.btn-big:active { transform: translateY(2px) scale(.985); }
+.btn-big:disabled { opacity: .3; cursor: default; transform: none; }
+.btn-outline { background: transparent; color: var(--ink); }
+.btn-outline:active { background: var(--ink); color: var(--paper); }
+
+.btn-ghost {
+  padding: .5rem .7rem;
+  font-size: .7rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, transform .13s ease;
+}
+.btn-ghost:hover { color: var(--ink); border-color: var(--ink); }
+.btn-ghost:active { transform: translateY(1px); }
+
+.menu-foot { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+.row-gap { display: flex; gap: .8rem; align-items: center; justify-content: center; flex-wrap: wrap; }
+
+.icon-btn {
+  width: 2rem; height: 2rem;
+  display: grid; place-items: center;
+  font-size: .8rem; font-weight: 700;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, transform .12s ease;
+}
+.icon-btn:hover { background: var(--ink); color: var(--paper); }
+.icon-btn:active { transform: scale(.92); }
+
+/* ---------- connecting ---------- */
+.spinner {
+  width: 1.6rem; height: 1.6rem;
+  border: 2px solid var(--rule);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  margin-top: 3rem;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- lobby ---------- */
+.room-label { margin: .4rem 0 0; font-size: .7rem; letter-spacing: .3em; color: var(--ink-3); font-weight: 400; }
+.room-code {
+  font-size: clamp(2.4rem, 16vw, 3.6rem);
+  font-weight: 700;
+  letter-spacing: .2em;
+  padding-left: .2em;
+  line-height: 1;
+  animation: glyph-set .4s cubic-bezier(.2, .9, .25, 1) both;
+}
+
+.lobby-players { list-style: none; margin: .2rem 0 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: .3rem; }
+.lobby-player {
+  display: flex; align-items: center; gap: .55rem;
+  padding: .5rem .6rem;
+  border: 1px solid var(--rule-soft);
+  border-left: 3px solid var(--sig, var(--rule));
+  font-size: .82rem; letter-spacing: .1em;
+  animation: screen-in .22s ease both;
+}
+.lobby-player.empty { color: var(--ink-3); border-left-color: var(--rule-soft); font-style: italic; letter-spacing: .06em; }
+.lobby-player.gone { opacity: .38; text-decoration: line-through; }
+.sig-dot { width: .5rem; height: .5rem; background: var(--sig, var(--ink)); border-radius: 50%; flex: none; }
+
+.lobby-settings { width: 100%; display: flex; flex-direction: column; gap: .55rem; margin-top: .3rem; }
+.setting { display: flex; flex-direction: column; gap: .3rem; }
+.setting-label { font-size: .62rem; letter-spacing: .24em; color: var(--ink-3); }
+.seg { display: flex; }
+.seg-btn {
+  flex: 1;
+  padding: .5rem .2rem;
+  font-size: .7rem; font-weight: 700; letter-spacing: .12em;
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--rule);
+  margin-left: -1px;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, transform .12s ease;
+}
+.seg-btn:first-child { margin-left: 0; }
+.seg-btn.on { background: var(--ink); color: var(--paper); border-color: var(--ink); position: relative; z-index: 1; }
+.seg-btn:disabled { cursor: default; opacity: .5; }
+.seg-btn:not(:disabled):active { transform: translateY(1px); }
+
+.mode-blurb { margin: .2rem 0 0; font-size: .7rem; color: var(--ink-2); letter-spacing: .05em; line-height: 1.5; }
+.lobby-wait { font-size: .7rem; color: var(--ink-3); letter-spacing: .1em; margin: 0; }
+
+/* ---------- game chrome ---------- */
+/* The game screen never scrolls and never reflows: every band below is a fixed
+   height, and the tower alone absorbs whatever space is left. */
+#scr-game { gap: .5rem; padding-top: .5rem; justify-content: flex-start; overflow: hidden; }
+.game-header { width: 100%; display: flex; align-items: flex-end; gap: .6rem; }
+.hdr-slug { flex: 1; align-self: auto; }
+.hdr-btns { display: flex; gap: .3rem; padding-bottom: .3rem; }
+
+.decree {
+  width: 100%;
+  text-align: center;
+  font-size: clamp(.82rem, 3.6vw, 1.02rem);
+  font-weight: 700;
+  letter-spacing: .14em;
+  line-height: 1.35;
+  padding: .4rem;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  /* fixed height, not min-height: a two-line decree must never push the tower
+     (and the keyboard under it) down the page */
+  height: 3.4rem;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.decree.swap { animation: decree-swap .42s cubic-bezier(.2, .9, .25, 1); }
+@keyframes decree-swap {
+  0% { opacity: 0; transform: translateY(-8px); letter-spacing: .34em; }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; letter-spacing: .14em; }
+}
+
+.tower-hud { width: 100%; display: flex; flex-direction: column; align-items: center; gap: .28rem; }
+.team-score {
+  font-size: clamp(1.6rem, 9vw, 2.4rem);
+  font-weight: 700;
+  letter-spacing: .06em;
+  line-height: 1;
+  height: clamp(1.6rem, 9vw, 2.4rem);
+}
+.team-score.bump { animation: bump .34s cubic-bezier(.2, .9, .25, 1); }
+@keyframes bump { 0% { transform: scale(1); } 32% { transform: scale(1.11); } 100% { transform: scale(1); } }
+
+/* Every text band on the game screen gets an explicit height. Different glyphs
+   (♥ vs —, empty vs "×2 COMBO", bold vs regular) produce different line boxes,
+   and any of that would nudge the tower and keyboard by a fraction of a pixel. */
+.tower-substats { display: flex; gap: 1rem; font-size: .64rem; line-height: 1rem; height: 1rem; letter-spacing: .18em; color: var(--ink-2); }
+.rpg-stat { line-height: 1rem; height: 1rem; overflow: hidden; }
+.combo-stat { color: var(--ink); font-weight: 700; min-width: 6rem; }
+
+.hunger-bar {
+  width: 100%; height: 4px;
+  border: 1px solid var(--rule);
+  overflow: hidden;
+}
+#hunger-fill {
+  height: 100%; width: 100%;
+  background: var(--ink);
+  transition: width .1s linear;
+}
+#hunger-fill.starving { animation: starve .42s steps(2, end) infinite; }
+@keyframes starve { 50% { opacity: .25; } }
+#hunger-fill.paused {
+  background: repeating-linear-gradient(90deg, var(--ink) 0 6px, transparent 6px 12px);
+  animation: crawl 1.1s linear infinite;
+}
+@keyframes crawl { to { background-position: 12px 0; } }
+.hunger-label { font-size: .58rem; line-height: .9rem; height: .9rem; letter-spacing: .2em; color: var(--ink-2); }
+/* visibility (not display:none) — its space stays reserved so a rescue
+   starting or ending never shifts the tower or the keyboard */
+.hunger-label.inactive { visibility: hidden; }
+
+.players-strip { width: 100%; display: flex; gap: .3rem; }
+.strip-p {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: .1rem;
+  padding: .35rem .2rem;
+  border: 1px solid var(--rule-soft);
+  border-top: 3px solid var(--sig, var(--rule));
+  min-width: 0;
+  transition: opacity .2s ease;
+}
+.strip-p.down { opacity: .35; }
+.strip-p.gone { opacity: .22; text-decoration: line-through; }
+.strip-name { font-size: .6rem; line-height: .9rem; height: .9rem; letter-spacing: .1em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strip-score { font-size: .82rem; line-height: 1.1rem; height: 1.1rem; font-weight: 700; letter-spacing: .04em; }
+.strip-hearts { font-size: .62rem; line-height: .9rem; height: .9rem; overflow: hidden; letter-spacing: .08em; color: var(--sig, var(--ink)); }
+
+/* ================= THE TOWER (CSS 3D) ================= */
+.t3d-stage {
+  --fw: min(84vw, 19.5rem);
+  --fh: 1.5rem;
+  --fd: 1.9rem;
+  --pitch: 9deg;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  perspective: 1000px;
+  perspective-origin: 50% 40%;
+}
+
+/* The ONE elastic band on this screen — it absorbs all leftover height, so
+   nothing below the tower ever moves no matter how tall the stack gets. Both
+   the 3D scene and the floating point flashes are absolutely positioned inside
+   it, so neither can ever spill over the HUD above. */
+.tower-area {
+  position: relative;
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.t3d-camera {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--pitch)) rotateY(var(--yaw, 0deg));
+  transition: transform .18s linear;
+}
+
+.t3d-world {
+  position: absolute;
+  left: 50%;
+  /* the ground sits a little up from the floor of the scene so a short stack
+     reads as standing in a space, not pinned to the bottom edge */
+  bottom: clamp(1rem, 20%, 5rem);
+  width: 0; height: 0;
+  transform-style: preserve-3d;
+  transform: translate3d(0, calc(var(--fh) * var(--base, 0)), 0);
+  transition: transform .45s cubic-bezier(.2, .9, .25, 1);
+}
+
+/* the plane the tower is built on — reads as ground, fades to a horizon */
+.t3d-ground {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: calc(var(--fw) * 2.1);
+  height: calc(var(--fw) * 1.5);
+  margin-left: calc(var(--fw) * -1.05);
+  transform-origin: 50% 100%;
+  transform: rotateX(90deg);
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+.t3d-ground-face {
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(90deg, var(--rule) 0 1px, transparent 1px 2.4rem),
+    repeating-linear-gradient(0deg, var(--rule) 0 1px, transparent 1px 2.4rem);
+  -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 78%);
+  mask-image: linear-gradient(to top, #000 0%, transparent 78%);
+}
+
+.t3d-floor {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: var(--fw);
+  height: var(--fh);
+  margin-left: calc(var(--fw) / -2);
+  transform-style: preserve-3d;
+  transform: translate3d(var(--jx, 0px), calc(var(--fh) * -1 * var(--i)), 0) rotateY(var(--jr, 0deg));
+}
+
+.t3d-slab { position: absolute; inset: 0; transform-style: preserve-3d; }
+
+.t3d-face { position: absolute; border: 1px solid var(--ink); }
+
+.t3d-front {
+  inset: 0;
+  transform: translateZ(calc(var(--fd) / 2));
+  background: var(--paper);
+  border-left: 4px solid var(--sig, var(--ink));
+  display: flex;
+  align-items: center;
+  padding: 0 .45rem 0 .55rem;
+  gap: .06em;
+}
+.t3d-glyph {
+  flex: none;
+  width: 1.15em;
+  text-align: center;
+  font-size: clamp(.8rem, 3.8vw, 1.02rem);
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.t3d-pts {
+  margin-left: auto;
+  font-size: .58rem;
+  letter-spacing: .08em;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.t3d-top {
+  left: 0; top: 50%;
+  width: var(--fw);
+  height: var(--fd);
+  margin-top: calc(var(--fd) / -2);
+  transform: translateY(calc(var(--fh) / -2)) rotateX(90deg);
+  background: var(--face-top);
+}
+.t3d-side {
+  top: 0; left: 50%;
+  width: var(--fd);
+  height: var(--fh);
+  margin-left: calc(var(--fd) / -2);
+  background: var(--face-side);
+}
+.t3d-left { transform: translateX(calc(var(--fw) / -2)) rotateY(-90deg); }
+.t3d-right { transform: translateX(calc(var(--fw) / 2)) rotateY(90deg); }
+
+/* a floor lands */
+.t3d-floor.landing.landed .t3d-slab { animation: floor-land .40s cubic-bezier(.2, .88, .3, 1) both; }
+@keyframes floor-land {
+  0%   { opacity: 0; transform: translate3d(0, -150px, 70px) rotateX(-24deg); }
+  55%  { opacity: 1; }
+  74%  { transform: translate3d(0, 5px, 0) rotateX(2.5deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* a floor scrolls out of the mounted window */
+.t3d-floor.sinking .t3d-slab { animation: floor-sink .4s ease-in forwards; }
+@keyframes floor-sink { to { opacity: 0; transform: translate3d(0, 16px, -30px) scale(.94); } }
+
+/* a blessing runs up the stack */
+.t3d-floor.blessed .t3d-front { animation: bless .5s ease-out var(--bless-delay, 0ms) both; }
+@keyframes bless { 0%, 100% { filter: none; } 45% { filter: invert(1); } }
+
+/* a life lost — the structure takes the hit */
+.t3d-stage.jolt .t3d-camera { animation: jolt .36s cubic-bezier(.36, .07, .19, .97); }
+@keyframes jolt {
+  0%, 100% { transform: rotateX(var(--pitch)) rotateY(var(--yaw, 0deg)) translate3d(0, 0, 0); }
+  20% { transform: rotateX(var(--pitch)) rotateY(var(--yaw, 0deg)) translate3d(-9px, 4px, 0); }
+  45% { transform: rotateX(var(--pitch)) rotateY(var(--yaw, 0deg)) translate3d(7px, -3px, 0); }
+  72% { transform: rotateX(var(--pitch)) rotateY(var(--yaw, 0deg)) translate3d(-4px, 1px, 0); }
+}
+
+/* the hunger clock is nearly out */
+.t3d-stage.stressed .t3d-world { animation: tremble .17s linear infinite; }
+@keyframes tremble {
+  0%, 100% { transform: translate3d(0, calc(var(--fh) * var(--base, 0)), 0); }
+  50%      { transform: translate3d(1.6px, calc(var(--fh) * var(--base, 0) + 1px), 0); }
+}
+
+/* ---- the fall ---- */
+.t3d-stage.collapsing .t3d-camera { animation: cam-fall 1.8s cubic-bezier(.3, .1, .5, 1) forwards; }
+@keyframes cam-fall {
+  0%   { transform: rotateX(var(--pitch)) rotateY(var(--yaw, 0deg)) translateZ(0); }
+  100% { transform: rotateX(calc(var(--pitch) + 7deg)) rotateY(calc(var(--yaw, 0deg) - 12deg)) translateZ(-130px); }
+}
+.t3d-stage.collapsing .t3d-floor .t3d-slab {
+  animation: topple 1.6s cubic-bezier(.55, .02, .86, .52) var(--fall-delay, 0ms) forwards;
+}
+@keyframes topple {
+  0%   { transform: none; opacity: 1; }
+  14%  { transform: translate3d(calc(var(--fall-x, 60px) * .1), 7px, 0) rotateZ(calc(var(--fall-spin, 40deg) * .07)); }
+  100% {
+    transform: translate3d(var(--fall-x, 60px), 210px, var(--fall-z, 0px))
+               rotateZ(var(--fall-spin, 40deg)) rotateX(var(--fall-tip, 30deg));
+    opacity: 0;
+  }
+}
+/* dust at the base */
+.t3d-stage.collapsing::after {
+  content: '';
+  position: absolute;
+  left: 50%; bottom: .4rem;
+  width: 16rem; height: 5rem;
+  margin-left: -8rem;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, var(--sheen) 0%, transparent 70%);
+  animation: dust 1.9s ease-out .35s both;
+  pointer-events: none;
+}
+@keyframes dust {
+  0%   { opacity: 0; transform: scale(.3); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.1); }
+}
+
+/* floating point flashes — confined to the tower area */
+.float-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.float-num {
+  position: absolute;
+  font-size: .84rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--sig, var(--ink));
+  animation: float-num 1.4s cubic-bezier(.2, .9, .25, 1) forwards;
+  pointer-events: none;
+  white-space: nowrap;
+}
+@keyframes float-num {
+  0%   { opacity: 0; transform: translateY(10px) scale(.85); }
+  18%  { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-58px) scale(1); }
+}
+
+/* ---------- tiles / rescue grid ---------- */
+.tile {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rule);
+  font-weight: 700;
+  background: transparent;
+  transition: border-color .14s ease, background .14s ease, color .14s ease, transform .14s cubic-bezier(.2, .9, .25, 1);
+}
+.tile.g { background: var(--g); border-color: var(--g); color: var(--on-fill); }
+.tile.y { background: var(--y); border-color: var(--y); color: var(--on-fill); }
+.tile.x { background: var(--x); border-color: transparent; color: var(--on-fill); }
+
+.tower-input { display: flex; gap: .32rem; justify-content: center; }
+.tower-tile {
+  width: 2.75rem; height: 2.75rem;
+  font-size: 1.35rem;
+  border: 1px solid var(--rule);
+  border-bottom: 2px solid var(--rule);
+}
+.tower-tile.filled {
+  border-color: var(--ink);
+  border-bottom-color: var(--ink);
+  animation: tile-pop .16s cubic-bezier(.2, .9, .25, 1);
+}
+@keyframes tile-pop { 0% { transform: scale(.86); } 100% { transform: scale(1); } }
+.tower-input.downed { opacity: .22; }
+.tower-input.shake { animation: shake .34s cubic-bezier(.36, .07, .19, .97); }
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-7px); }
+  40%, 60% { transform: translateX(7px); }
+}
+
+.revive-box {
+  width: 100%;
+  flex: 1 1 0;                  /* takes the tower's place exactly */
+  min-height: 0;
+  overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem;
+  border: 1px dashed var(--rule);
+  animation: screen-in .24s cubic-bezier(.2, .9, .25, 1) both;
+}
+.revive-title { margin: 0; font-size: .68rem; letter-spacing: .2em; color: var(--ink-2); }
+.board { display: flex; flex-direction: column; gap: .22rem; }
+.brow { display: flex; gap: .22rem; }
+.tile.mini { width: 2.1rem; height: 2.1rem; font-size: 1rem; }
+.tile.active-row { border-color: var(--ink); }
+
+/* ---------- shop ---------- */
+.shop { display: flex; justify-content: center; width: 100%; }
+.shop-btn {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .45rem .9rem;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, opacity .16s ease, transform .12s ease;
+}
+.shop-btn:disabled { opacity: .28; cursor: default; }
+.shop-btn:not(:disabled):hover { background: var(--ink); color: var(--paper); }
+.shop-btn:not(:disabled):active { transform: translateY(1px); }
+.shop-glyph { font-size: .9rem; }
+.shop-name { font-size: .66rem; font-weight: 700; letter-spacing: .18em; }
+.shop-price { font-size: .62rem; letter-spacing: .1em; opacity: .65; }
+
+/* ---------- keyboard ---------- */
+.keyboard { width: 100%; flex: none; display: flex; flex-direction: column; gap: .3rem; padding-top: .3rem; }
+.krow { display: flex; gap: .26rem; justify-content: center; }
+.key {
+  flex: 1;
+  min-width: 0;
+  height: 2.9rem;
+  font-size: .9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: background .14s ease, color .14s ease, border-color .14s ease, transform .09s cubic-bezier(.2, .9, .25, 1);
+}
+.key:active { transform: translateY(2px) scale(.97); background: var(--ink); color: var(--paper); }
+.key-wide { flex: 1.6; font-size: .62rem; letter-spacing: .1em; }
+.key.g { background: var(--g); border-color: var(--g); color: var(--on-fill); }
+.key.y { background: var(--y); border-color: var(--y); color: var(--on-fill); }
+.key.x { opacity: .3; }
+.key.ripple::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--ink);
+  opacity: .18;
+  animation: ripple .3s ease-out forwards;
+}
+@keyframes ripple { from { transform: scale(.2); opacity: .3; } to { transform: scale(1.4); opacity: 0; } }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1rem;
+  padding: 1.2rem;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(6px);
+  z-index: 40;
+  animation: screen-in .2s cubic-bezier(.2, .9, .25, 1) both;
+}
+.overlay.opaque { background: var(--paper); backdrop-filter: none; }
+.overlay h2 { font-size: 1.1rem; letter-spacing: .24em; margin: 0; }
+.overlay p { font-size: .8rem; color: var(--ink-2); text-align: center; line-height: 1.6; margin: 0; }
+
+.help-card, .picker-card {
+  max-width: 30rem;
+  max-height: 84vh;
+  overflow-y: auto;
+  padding: 1.2rem;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  display: flex; flex-direction: column; gap: .7rem;
+}
+.help-card h3 { margin: .5rem 0 0; font-size: .68rem; letter-spacing: .26em; color: var(--ink); border-bottom: 1px solid var(--rule); padding-bottom: .25rem; }
+.help-card p { text-align: left; font-size: .76rem; line-height: 1.65; }
+.help-card b { font-weight: 700; color: var(--ink); }
+
+.picker-target {
+  display: block; width: 100%;
+  padding: .6rem;
+  margin-bottom: .35rem;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--sig, var(--rule));
+  color: var(--ink);
+  font-size: .78rem; letter-spacing: .12em;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.picker-target.on { background: var(--ink); color: var(--paper); }
+
+.toast {
+  position: fixed;
+  left: 50%; bottom: 5.6rem;
+  transform: translateX(-50%);
+  max-width: min(92vw, 28rem);
+  padding: .6rem .9rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: .72rem;
+  letter-spacing: .1em;
+  text-align: center;
+  z-index: 50;
+}
+.toast.pop { animation: toast-in .26s cubic-bezier(.2, .9, .25, 1); }
+@keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+
+/* ---------- game over ---------- */
+.over-title { margin: .4rem 0 0; font-size: clamp(1.8rem, 11vw, 3rem); font-weight: 700; letter-spacing: .12em; animation: glyph-set .45s cubic-bezier(.2, .9, .25, 1) both; }
+.over-sub { margin: 0; font-size: .72rem; letter-spacing: .1em; color: var(--ink-2); text-align: center; }
+.standings { list-style: none; counter-reset: rank; margin: .6rem 0 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: .3rem; }
+.standing {
+  counter-increment: rank;
+  display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+  padding: .55rem .7rem;
+  border: 1px solid var(--rule-soft);
+  border-left: 3px solid var(--sig, var(--rule));
+  font-size: .8rem; letter-spacing: .1em;
+  animation: screen-in .3s cubic-bezier(.2, .9, .25, 1) both;
+}
+.standing::before { content: counter(rank) '.'; color: var(--ink-3); margin-right: .4rem; }
+.standing.winner { border-color: var(--ink); font-weight: 700; }
+.standing-score { font-weight: 700; }
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .t3d-stage { --pitch: 0deg; }
+}
+
+/* ---------- short screens: shrink the fixed bands, never the tower ---------- */
+@media (max-height: 720px) {
+  .key { height: 2.5rem; }
+  .tower-tile { width: 2.4rem; height: 2.4rem; font-size: 1.15rem; }
+  .tile.mini { width: 1.85rem; height: 1.85rem; font-size: .9rem; }
+}
+@media (max-height: 620px) {
+  .decree { height: 2.6rem; font-size: .76rem; padding: .3rem; }
+  .team-score { font-size: 1.4rem; }
+  .tile.mini { width: 1.6rem; height: 1.6rem; font-size: .8rem; }
+  .key { height: 2.2rem; }
+}

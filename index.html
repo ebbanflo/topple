@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#ffffff">
+<title>TO-WORD — build the tower, obey the decree</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="TO-WORD">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ MAIN MENU ============ -->
+  <section id="scr-menu" class="screen">
+    <div class="slug">FADE IN:</div>
+    <h1 class="big-title" aria-label="TO-WORD"></h1>
+    <p class="tagline">a co-op word tower. 1&ndash;4 players. it falls eventually.</p>
+    <div class="menu-box">
+      <input id="inp-name" maxlength="12" autocomplete="off" spellcheck="false" placeholder="YOUR NAME" aria-label="Your name">
+      <button id="btn-host" class="btn-big">HOST A ROOM</button>
+      <div class="join-row">
+        <input id="inp-code" maxlength="4" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code">
+        <button id="btn-join" class="btn-big btn-outline">JOIN</button>
+      </div>
+    </div>
+    <div class="menu-foot">
+      <button id="btn-theme" class="btn-ghost" aria-live="polite">◐ INVERT</button>
+      <button id="btn-sound" class="btn-ghost" aria-live="polite">SOUND ON</button>
+      <button id="btn-help-menu" class="btn-ghost">HOW TO PLAY</button>
+    </div>
+    <p class="credits">no accounts &middot; no downloads &middot; the room lives while the host stays</p>
+  </section>
+
+  <!-- ============ CONNECTING ============ -->
+  <section id="scr-connect" class="screen hidden">
+    <div class="spinner" aria-hidden="true"></div>
+    <p id="connect-msg" class="mono-line">connecting…</p>
+    <button id="btn-connect-back" class="btn-ghost">&larr; BACK</button>
+  </section>
+
+  <!-- ============ LOBBY ============ -->
+  <section id="scr-lobby" class="screen hidden">
+    <div class="slug">INT. THE TOWER &mdash; PRE-PRODUCTION</div>
+    <h2 class="room-label">ROOM</h2>
+    <div id="room-code" class="room-code" title="room code"></div>
+    <button id="btn-share" class="btn-ghost">COPY INVITE LINK</button>
+    <ul id="lobby-players" class="lobby-players"></ul>
+    <div id="lobby-settings" class="lobby-settings">
+      <div class="setting" id="set-diff">
+        <span class="setting-label">DECREE LEVEL</span>
+        <div class="seg" role="radiogroup" data-setting="difficulty">
+          <button data-val="easy" class="seg-btn">EASY</button>
+          <button data-val="medium" class="seg-btn">MED</button>
+          <button data-val="hard" class="seg-btn">HARD</button>
+          <button data-val="ramp" class="seg-btn">RAMP</button>
+        </div>
+      </div>
+      <div class="setting" id="set-ramp">
+        <span class="setting-label">WORDS PER DECREE</span>
+        <div class="seg" role="radiogroup" data-setting="rampWords">
+          <button data-val="3" class="seg-btn">3</button>
+          <button data-val="5" class="seg-btn">5</button>
+          <button data-val="10" class="seg-btn">10</button>
+        </div>
+      </div>
+      <p id="mode-blurb" class="mode-blurb"></p>
+    </div>
+    <button id="btn-start" class="btn-big" disabled>START</button>
+    <p id="lobby-wait" class="lobby-wait hidden">waiting for the host to start…</p>
+    <div class="row-gap">
+      <button id="btn-lobby-help" class="btn-ghost">HELP</button>
+      <button id="btn-lobby-quit" class="btn-ghost">LEAVE</button>
+    </div>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="scr-game" class="screen hidden">
+    <header class="game-header">
+      <div id="hdr-slug" class="slug hdr-slug">INT. THE TOWER &mdash; CONTINUOUS</div>
+      <div class="hdr-btns">
+        <button id="btn-pause" class="icon-btn" title="Pause (privacy screen)">II</button>
+        <button id="btn-help" class="icon-btn" title="How to play">?</button>
+        <button id="btn-quit" class="icon-btn" title="Quit to menu">&times;</button>
+      </div>
+    </header>
+
+    <div id="decree" class="decree" aria-live="polite"></div>
+
+    <div class="tower-hud">
+      <div id="team-score" class="team-score">0</div>
+      <div class="tower-substats">
+        <span id="tower-height" class="rpg-stat">HEIGHT 0</span>
+        <span id="tower-stage" class="rpg-stat">STAGE 1</span>
+        <span id="tower-combo" class="rpg-stat combo-stat"></span>
+      </div>
+      <div id="hunger-bar" class="hunger-bar" title="the tower hungers"><div id="hunger-fill"></div></div>
+      <div id="hunger-label" class="hunger-label inactive">REVIVING &mdash; CLOCK PAUSED</div>
+    </div>
+
+    <div id="players-strip" class="players-strip"></div>
+
+    <div id="revive-box" class="revive-box hidden">
+      <p id="revive-title" class="revive-title"></p>
+      <div id="revive-board" class="board revive-board"></div>
+    </div>
+
+    <div id="tower-area" class="tower-area">
+      <div id="tower-scene" class="t3d-stage" aria-label="the tower"></div>
+      <div id="float-layer" class="float-layer" aria-hidden="true"></div>
+    </div>
+
+    <div id="tower-input" class="tower-input"></div>
+    <div id="shop" class="shop hidden"></div>
+    <div id="keyboard" class="keyboard" aria-label="on-screen keyboard"></div>
+  </section>
+
+  <!-- ============ GAME OVER ============ -->
+  <section id="scr-over" class="screen hidden">
+    <div class="slug">EXT. THE RUBBLE &mdash; DAY</div>
+    <h2 id="over-title" class="over-title"></h2>
+    <p id="over-sub" class="over-sub"></p>
+    <ol id="standings" class="standings"></ol>
+    <button id="btn-again" class="btn-big hidden">BUILD AGAIN</button>
+    <p id="over-wait" class="lobby-wait hidden">the host can start another run…</p>
+    <button id="btn-over-menu" class="btn-ghost">&larr; BACK TO MENU</button>
+  </section>
+
+  <!-- ============ ROOM DEAD / FATAL ============ -->
+  <section id="scr-dead" class="screen hidden">
+    <div class="slug">CUT TO BLACK.</div>
+    <p id="dead-msg" class="mono-line"></p>
+    <button id="btn-dead-menu" class="btn-big">&larr; BACK TO MENU</button>
+  </section>
+
+  <!-- ============ OVERLAYS ============ -->
+  <div id="ovl-pause" class="overlay opaque hidden">
+    <h2>PAUSED</h2>
+    <p>your screen is hidden &mdash; the tower keeps hungering for everyone else.</p>
+    <button id="btn-resume" class="btn-big">RESUME</button>
+  </div>
+
+  <div id="ovl-help" class="overlay hidden">
+    <div class="help-card">
+      <h2>HOW TO PLAY</h2>
+      <p><b>Co-op. 1&ndash;4 players. Endless.</b> Everyone types into the same tower. Every valid
+      5-letter word you land becomes a new floor &mdash; and every word must obey the current
+      <b>DECREE</b>.</p>
+      <h3>THE DECREE</h3>
+      <p>A rule that every word must satisfy: use a letter &rarr; a letter pinned to a slot &rarr;
+      banned letters &rarr; vowel counts &rarr; and stranger twists at HARD (a rare letter, matching
+      first/last letters, "no E", "ends in K", a double letter, no vowels at all). It changes every
+      <b>3 / 5 / 10</b> words &mdash; the host's call. <b>LEVEL</b> sets its difficulty:
+      EASY / MED / HARD hold that band all game, <b>RAMP</b> climbs easy&rarr;hard and then stays
+      there. Every decree is vetted at generation time to be clearable with words you'd actually
+      recognise.</p>
+      <h3>LIVES</h3>
+      <p>Three each, capped at five. You lose one for a word that isn't real, a word that breaks
+      the decree, or a word <b>still visible in the tower</b> (scrolled-off floors become playable
+      again). The <b>hunger bar</b> drains constantly &mdash; if it empties, <em>everyone</em>
+      bleeds a life and the combo resets. When every player is down, the tower falls.</p>
+      <h3>SCORING</h3>
+      <p>Each floor scores base &times; letter values &times; <b>stage</b>, inflated by your
+      <b>combo</b> (every consecutive good word, team-wide). Numbers are meant to be absurd.</p>
+      <h3>REVIVE ✦</h3>
+      <p>Down a teammate? Anyone still standing can spend <b>5,000</b> points to start a rescue:
+      solve one plain wordle and they're back with 2 lives. Starting a rescue <b>pauses the hunger
+      clock for the whole room</b> &mdash; it's untimed &mdash; and it resumes with a fresh window
+      once the rescue ends. Everyone watches the letters.</p>
+      <h3>BLESSINGS</h3>
+      <p>Every <b>10th floor</b>, the whole team gets a bonus heart (including anyone at zero). And
+      if the last five floors happen to spell <b>T-O-W-E-R</b> straight down any one column, the
+      tower blesses you with another.</p>
+      <button id="btn-help-close" class="btn-big">GOT IT</button>
+    </div>
+  </div>
+
+  <div id="ovl-picker" class="overlay hidden">
+    <div class="picker-card">
+      <h2 id="picker-title"></h2>
+      <div id="picker-targets"></div>
+      <div class="row-gap">
+        <button id="btn-picker-go" class="btn-big" disabled>GO</button>
+        <button id="btn-picker-cancel" class="btn-ghost">CANCEL</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+</div>
+
+<script src="vendor/supabase.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
