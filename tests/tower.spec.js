@@ -529,6 +529,53 @@ test.describe('to-word', () => {
     expect((await towerState(host)).height).toBe(12);
   });
 
+  test('phone: a full stack fits inside the tower band, and typing cannot zoom the page', async ({ context }) => {
+    test.setTimeout(60000);
+    // Reported from a real iPhone: the top of the tower was cut off, and fast
+    // taps on the keyboard triggered Safari's double-tap-to-zoom.
+    const cssText = readFileSync(STYLE_CSS_PATH, 'utf8');
+    // double-tap zoom (and its 300ms click delay) is off for the whole document
+    expect(cssText).toMatch(/body\s*\{[^}]*touch-action:\s*manipulation/s);
+    // ...and the viewport must NOT try to fix it by banning pinch-zoom, which
+    // iOS ignores anyway and which breaks zoom for anyone who needs it
+    const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
+    const viewport = html.match(/<meta name="viewport" content="([^"]+)"/)[1];
+    expect(viewport).toContain('viewport-fit=cover'); // makes safe-area insets real
+    expect(viewport).not.toContain('user-scalable=no');
+    expect(viewport).not.toContain('maximum-scale');
+
+    const host = await openPage(context);
+    await host.setViewportSize({ width: 390, height: 664 }); // iPhone minus browser chrome
+    await hostGame(host, 'POCKET', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.click('#btn-start');
+    await waitTower(host);
+    await host.evaluate(() => { window.__toword.engine.tower.constraint = {}; });
+
+    // overfill the window so all 10 mounted floors are present
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 12);
+    for (const w of words) await climb(host, w);
+    await host.waitForTimeout(600); // let the landing + camera transitions settle
+
+    const floors = host.locator('.t3d-floor:not(.sinking)');
+    await expect(floors).toHaveCount(10);
+
+    // every mounted floor is fully inside the scene — nothing sheared off the top
+    const scene = await host.locator('#tower-scene').boundingBox();
+    const boxes = await floors.evaluateAll((els) => els.map((e) => {
+      const r = e.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom };
+    }));
+    expect(boxes).toHaveLength(10);
+    for (const box of boxes) {
+      expect(box.top).toBeGreaterThanOrEqual(scene.y - 1);
+      expect(box.bottom).toBeLessThanOrEqual(scene.y + scene.height + 1);
+    }
+
+    // and the tower still owns a meaningful share of the screen, rather than
+    // being squeezed to nothing by the HUD
+    expect(scene.height).toBeGreaterThan(150);
+  });
+
   test('pause works mid-climb (regression: the app shell needs top safe-area padding)', async ({ context }) => {
     // apple-mobile-web-app-capable makes standalone iOS render edge-to-edge, so
     // the shell must reserve the top inset or the header buttons sit under the

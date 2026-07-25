@@ -31,6 +31,30 @@ export class Tower3D {
     this.base = 0;           // absolute index of the bottom-most mounted floor
     this.collapsed = false;
     this.setYaw(0);
+    this.fit();
+    // The band the tower gets is whatever the rest of the screen leaves over,
+    // and on a phone that changes when Safari's toolbars collapse or the device
+    // rotates. Re-fit on every one of those.
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => this.fit());
+      this._ro.observe(this.root);
+    }
+    window.addEventListener('orientationchange', () => setTimeout(() => this.fit(), 250));
+  }
+
+  // Size a floor so that a FULL stack (TOWER.visibleRows of them) fits inside
+  // the space this renderer actually has, instead of being clipped off the top.
+  // Everything about a slab scales off --fh, so this one number does it all.
+  fit() {
+    const h = this.root.clientHeight;
+    if (!h) return;
+    // 0.82 leaves room for the ground offset below and the landing animation's
+    // overshoot above; the clamp keeps floors legible on tiny screens and stops
+    // them ballooning on a desktop monitor.
+    const fh = Math.max(13, Math.min(30, (h * 0.82) / VISIBLE));
+    this.root.style.setProperty('--fh', `${fh.toFixed(2)}px`);
+    this.root.style.setProperty('--fd', `${(fh * 1.25).toFixed(2)}px`);
+    this.root.style.setProperty('--glyph', `${Math.max(10, Math.min(17, fh * 0.68)).toFixed(2)}px`);
   }
 
   // Idle drift: a slow yaw so the structure reads as solid without the player

@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- viewport-fit=cover is what makes env(safe-area-inset-*) non-zero on iOS.
+     maximum-scale/user-scalable are deliberately absent: iOS has ignored them
+     for years and they only break pinch-zoom accessibility. Accidental zoom
+     while typing is handled properly, with touch-action (see style.css). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
 <title>TO-WORD — build the tower, obey the decree</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">

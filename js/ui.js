@@ -214,6 +214,8 @@ export class UI {
     const t = $('toast');
     t.textContent = msg;
     t.classList.remove('hidden', 'pop');
+    // mid-run the bottom of the screen is all keyboard — speak over the tower
+    t.classList.toggle('over-tower', !$('scr-game').classList.contains('hidden'));
     void t.offsetWidth;
     t.classList.add('pop');
     clearTimeout(this.toastTimer);

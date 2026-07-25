@@ -49,15 +49,34 @@ html, body {
   font-family: 'Courier New', Courier, 'Nimbus Mono PS', monospace;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overscroll-behavior: none;
+  /* Typing on a phone is a burst of fast taps in a small area, which Safari
+     reads as double-tap-to-zoom. `manipulation` drops the double-tap gesture
+     (and its 300ms click delay) while leaving pinch-zoom and scrolling alone. */
+  touch-action: manipulation;
+}
+
+/* Nothing you tap repeatedly should be selectable, zoomable or long-pressable
+   — a stray text selection or callout mid-word is the same bug wearing a hat. */
+.key, .btn-big, .btn-ghost, .icon-btn, .seg-btn, .shop-btn, .picker-target,
+.tile, .t3d-floor, .strip-p {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 body { transition: background .28s ease, color .28s ease; }
 
 #app {
   /* exactly one viewport tall: the game screen is a rigid, non-scrolling
-     layout, so the keyboard can never drift as the tower or HUD changes */
-  height: 100%;
+     layout, so the keyboard can never drift as the tower or HUD changes.
+     dvh (not vh) so mobile Safari's collapsing toolbars don't hide the bottom
+     of the layout behind themselves; vh stays as the fallback. */
+  height: 100vh;
+  height: 100dvh;
   max-width: 34rem;
   margin: 0 auto;
   padding: env(safe-area-inset-top) .75rem calc(.5rem + env(safe-area-inset-bottom));
@@ -176,7 +195,7 @@ input, button { font-family: inherit; color: inherit; }
 .row-gap { display: flex; gap: .8rem; align-items: center; justify-content: center; flex-wrap: wrap; }
 
 .icon-btn {
-  width: 2rem; height: 2rem;
+  width: 1.8rem; height: 1.8rem;
   display: grid; place-items: center;
   font-size: .8rem; font-weight: 700;
   background: transparent;
@@ -249,24 +268,24 @@ input, button { font-family: inherit; color: inherit; }
 /* ---------- game chrome ---------- */
 /* The game screen never scrolls and never reflows: every band below is a fixed
    height, and the tower alone absorbs whatever space is left. */
-#scr-game { gap: .5rem; padding-top: .5rem; justify-content: flex-start; overflow: hidden; }
+#scr-game { gap: .4rem; padding-top: .4rem; justify-content: flex-start; overflow: hidden; }
 .game-header { width: 100%; display: flex; align-items: flex-end; gap: .6rem; }
-.hdr-slug { flex: 1; align-self: auto; }
+.hdr-slug { flex: 1; align-self: auto; font-size: .56rem; padding-bottom: .15rem; }
 .hdr-btns { display: flex; gap: .3rem; padding-bottom: .3rem; }
 
 .decree {
   width: 100%;
   text-align: center;
-  font-size: clamp(.82rem, 3.6vw, 1.02rem);
+  font-size: clamp(.74rem, 3.3vw, .96rem);
   font-weight: 700;
-  letter-spacing: .14em;
-  line-height: 1.35;
-  padding: .4rem;
+  letter-spacing: .12em;
+  line-height: 1.3;
+  padding: .3rem;
   border-top: 2px solid var(--ink);
   border-bottom: 2px solid var(--ink);
   /* fixed height, not min-height: a two-line decree must never push the tower
      (and the keyboard under it) down the page */
-  height: 3.4rem;
+  height: 2.6rem;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -278,13 +297,13 @@ input, button { font-family: inherit; color: inherit; }
   100% { opacity: 1; transform: none; letter-spacing: .14em; }
 }
 
-.tower-hud { width: 100%; display: flex; flex-direction: column; align-items: center; gap: .28rem; }
+.tower-hud { width: 100%; display: flex; flex-direction: column; align-items: center; gap: .2rem; }
 .team-score {
-  font-size: clamp(1.6rem, 9vw, 2.4rem);
+  font-size: clamp(1.3rem, 7vw, 2rem);
   font-weight: 700;
   letter-spacing: .06em;
   line-height: 1;
-  height: clamp(1.6rem, 9vw, 2.4rem);
+  height: clamp(1.3rem, 7vw, 2rem);
 }
 .team-score.bump { animation: bump .34s cubic-bezier(.2, .9, .25, 1); }
 @keyframes bump { 0% { transform: scale(1); } 32% { transform: scale(1.11); } 100% { transform: scale(1); } }
@@ -322,21 +341,23 @@ input, button { font-family: inherit; color: inherit; }
 .strip-p {
   flex: 1;
   display: flex; flex-direction: column; align-items: center; gap: .1rem;
-  padding: .35rem .2rem;
+  padding: .2rem .2rem;
   border: 1px solid var(--rule-soft);
-  border-top: 3px solid var(--sig, var(--rule));
+  border-top: 2px solid var(--sig, var(--rule));
   min-width: 0;
   transition: opacity .2s ease;
 }
 .strip-p.down { opacity: .35; }
 .strip-p.gone { opacity: .22; text-decoration: line-through; }
-.strip-name { font-size: .6rem; line-height: .9rem; height: .9rem; letter-spacing: .1em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.strip-score { font-size: .82rem; line-height: 1.1rem; height: 1.1rem; font-weight: 700; letter-spacing: .04em; }
-.strip-hearts { font-size: .62rem; line-height: .9rem; height: .9rem; overflow: hidden; letter-spacing: .08em; color: var(--sig, var(--ink)); }
+.strip-name { font-size: .55rem; line-height: .8rem; height: .8rem; letter-spacing: .1em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strip-score { font-size: .78rem; line-height: 1rem; height: 1rem; font-weight: 700; letter-spacing: .04em; }
+.strip-hearts { font-size: .58rem; line-height: .8rem; height: .8rem; overflow: hidden; letter-spacing: .08em; color: var(--sig, var(--ink)); }
 
 /* ================= THE TOWER (CSS 3D) ================= */
 .t3d-stage {
-  --fw: min(84vw, 19.5rem);
+  --fw: min(78vw, 18rem);
+  /* --fh / --fd / --glyph are overwritten by Tower3D.fit() from the measured
+     height of this element; these are the pre-measure defaults. */
   --fh: 1.5rem;
   --fd: 1.9rem;
   --pitch: 9deg;
@@ -371,7 +392,7 @@ input, button { font-family: inherit; color: inherit; }
   left: 50%;
   /* the ground sits a little up from the floor of the scene so a short stack
      reads as standing in a space, not pinned to the bottom edge */
-  bottom: clamp(1rem, 20%, 5rem);
+  bottom: clamp(.5rem, 9%, 3rem);
   width: 0; height: 0;
   transform-style: preserve-3d;
   transform: translate3d(0, calc(var(--fh) * var(--base, 0)), 0);
@@ -427,13 +448,13 @@ input, button { font-family: inherit; color: inherit; }
   flex: none;
   width: 1.15em;
   text-align: center;
-  font-size: clamp(.8rem, 3.8vw, 1.02rem);
+  font-size: var(--glyph, clamp(.8rem, 3.8vw, 1.02rem));
   font-weight: 700;
   letter-spacing: .02em;
 }
 .t3d-pts {
   margin-left: auto;
-  font-size: .58rem;
+  font-size: max(.48rem, calc(var(--glyph, .95rem) * .56));
   letter-spacing: .08em;
   color: var(--ink-2);
   white-space: nowrap;
@@ -559,8 +580,8 @@ input, button { font-family: inherit; color: inherit; }
 
 .tower-input { display: flex; gap: .32rem; justify-content: center; }
 .tower-tile {
-  width: 2.75rem; height: 2.75rem;
-  font-size: 1.35rem;
+  width: 2.5rem; height: 2.5rem;
+  font-size: 1.25rem;
   border: 1px solid var(--rule);
   border-bottom: 2px solid var(--rule);
 }
@@ -598,7 +619,7 @@ input, button { font-family: inherit; color: inherit; }
 .shop { display: flex; justify-content: center; width: 100%; }
 .shop-btn {
   display: flex; align-items: center; gap: .5rem;
-  padding: .45rem .9rem;
+  padding: .3rem .85rem;
   background: transparent;
   border: 1px solid var(--rule);
   color: var(--ink);
@@ -609,7 +630,7 @@ input, button { font-family: inherit; color: inherit; }
 .shop-btn:not(:disabled):hover { background: var(--ink); color: var(--paper); }
 .shop-btn:not(:disabled):active { transform: translateY(1px); }
 .shop-glyph { font-size: .9rem; }
-.shop-name { font-size: .66rem; font-weight: 700; letter-spacing: .18em; }
+.shop-name { font-size: .6rem; font-weight: 700; letter-spacing: .16em; }
 .shop-price { font-size: .62rem; letter-spacing: .1em; opacity: .65; }
 
 /* ---------- keyboard ---------- */
@@ -618,7 +639,7 @@ input, button { font-family: inherit; color: inherit; }
 .key {
   flex: 1;
   min-width: 0;
-  height: 2.9rem;
+  height: 2.7rem;
   font-size: .9rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -690,6 +711,7 @@ input, button { font-family: inherit; color: inherit; }
   position: fixed;
   left: 50%; bottom: 5.6rem;
   transform: translateX(-50%);
+  z-index: 50;
   max-width: min(92vw, 28rem);
   padding: .6rem .9rem;
   background: var(--ink);
@@ -699,6 +721,9 @@ input, button { font-family: inherit; color: inherit; }
   text-align: center;
   z-index: 50;
 }
+/* During a run the bottom of the screen is all keyboard, so the toast moves up
+   and speaks over the tower itself. */
+.toast.over-tower { bottom: auto; top: 38%; }
 .toast.pop { animation: toast-in .26s cubic-bezier(.2, .9, .25, 1); }
 @keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
 
