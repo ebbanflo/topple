@@ -389,6 +389,81 @@ test.describe('topple', () => {
     await host.waitForFunction(() => window.__topple.state().tower.stage === 2, null, { polling: 100 });
   });
 
+  test('decree draft: three distinct decrees, any player picks, first tap wins', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    // a long draft window so the test drives the choice rather than the timeout
+    const code = await hostGame(host, 'ARCHITECT', {
+      ...FAST, rampWords: 1, hungerMs: 600000, draftMs: 20000,
+    });
+    const guest = await openPage(context);
+    await joinGame(guest, code, 'MASON');
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
+    const guestId = await guest.evaluate(() => window.__topple.selfId);
+    await startGame(host, [host, guest]);
+    await waitTower(host); await waitTower(guest);
+
+    const before = await towerState(host);
+    const [w] = findWords(before.constraint, [], 1);
+    await climb(host, w); // rampWords=1, so this triggers the draft
+
+    // the offer reaches EVERY player, not just the host
+    for (const page of [host, guest]) {
+      await page.waitForFunction(() => !!window.__topple.state().tower.offer, null, { polling: 50 });
+    }
+    const offer = (await towerState(guest)).offer;
+    expect(offer.options).toHaveLength(3);
+    // three genuinely different rules, and none of them the outgoing one
+    const descs = offer.options.map(describeConstraint);
+    expect(new Set(descs).size).toBe(3);
+    expect(descs).not.toContain(describeConstraint(before.constraint));
+    await expect(guest.locator('#ovl-draft')).toBeVisible();
+    await expect(guest.locator('.draft-opt')).toHaveCount(3);
+
+    // the GUEST picks - drafting is not a host privilege
+    const chosen = describeConstraint(offer.options[2]);
+    await guest.click('[data-testid="draft-2"]');
+    await host.waitForFunction((d) => {
+      const t = window.__topple.state().tower;
+      return !t.offer && t.stage === 2;
+    }, null, { polling: 50 });
+    expect(describeConstraint((await towerState(host)).constraint)).toBe(chosen);
+    // and everyone's overlay closes, including the player who didn't pick
+    await expect(host.locator('#ovl-draft')).toBeHidden();
+    await expect(guest.locator('#ovl-draft')).toBeHidden();
+
+    // a late second pick finds no offer and changes nothing
+    await host.evaluate(() => window.__topple.net.emit('pick', { index: 0 }));
+    await host.waitForTimeout(300);
+    expect(describeConstraint((await towerState(host)).constraint)).toBe(chosen);
+
+    // the decree that was picked is the one actually enforced
+    const t2 = await towerState(host);
+    const breaker = findNonMatching(t2.constraint, [w]);
+    await miss(host, breaker);
+  });
+
+  test('decree draft: nobody picks in time, so the tower picks', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    await hostGame(host, 'SLOWPOKE', { ...FAST, rampWords: 1, hungerMs: 600000, draftMs: 600 });
+    await host.click('#btn-start');
+    await waitTower(host);
+
+    const before = await towerState(host);
+    const [w] = findWords(before.constraint, [], 1);
+    await climb(host, w);
+    await host.waitForFunction(() => !!window.__topple.state().tower.offer, null, { polling: 40 });
+    const first = describeConstraint((await towerState(host)).offer.options[0]);
+
+    // let the window lapse untouched
+    await host.waitForFunction(() => !window.__topple.state().tower.offer, null, { polling: 50, timeout: 10000 });
+    const t = await towerState(host);
+    expect(t.stage).toBe(2);
+    expect(describeConstraint(t.constraint)).toBe(first); // the tower takes option one
+    await expect(host.locator('#ovl-draft')).toBeHidden();
+  });
+
   test('decree difficulty pools: all survivable over a long game, and every decree is clearable with RECOGNIZABLE words', () => {
     for (const difficulty of ['easy', 'medium', 'hard', 'ramp']) {
       const used = new Set();

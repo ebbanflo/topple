@@ -36,6 +36,7 @@ export class Mirror {
       [EV.START]: (d) => this.onStart(d),
       [EV.SCORES]: (d) => this.onScores(d),
       [EV.SHOP_ERR]: (d) => { if (d.to === selfId) { this.showToast(d.reason); this.fire('shoperr', d); } },
+      [EV.DECREE_OFFER]: (d) => this.onDecreeOffer(d),
       [EV.TOWER]: (d) => this.onTower(d),
       [EV.TOWER_WORD]: (d) => this.onTowerWord(d),
       [EV.TOWER_MISS]: (d) => this.onTowerMiss(d),
@@ -103,6 +104,7 @@ export class Mirror {
   onTower(d) {
     const t = this.tower || (this.tower = { rows: [], buried: {} });
     const hadStage = t.stage;
+    t.offer = null;              // any decree in hand is spent the moment one lands
     t.stage = d.stage;
     t.constraint = d.constraint;
     t.height = d.height;
@@ -113,6 +115,21 @@ export class Mirror {
     t.digNeed = d.digNeed ?? t.digNeed ?? 3;
     this.applyScores(d.scores);
     this.fire('tower', { ...d, fresh: hadStage == null });
+  }
+
+  onDecreeOffer(d) {
+    const t = this.tower;
+    if (!t) return;
+    t.offer = { options: d.options, until: now() + d.ms };
+    this.fire('offer', d);
+  }
+
+  myOffer() { return (this.tower && this.tower.offer) || null; }
+
+  pickDecree(i) {
+    if (!this.myOffer()) return false;
+    this.net.emit(IN.DECREE_PICK, { index: i });
+    return true;
   }
 
   onTowerWord(d) {
@@ -241,6 +258,9 @@ export class Mirror {
         hungerMs: s.tower.hungerMs, lives: { ...s.tower.lives },
         hungerAt: now() + s.tower.hungerMs,
         digNeed: s.tower.digNeed ?? 3,
+        offer: s.tower.offer
+          ? { options: s.tower.offer.options, until: now() + (this.settings?.draftMs ?? 9000) }
+          : null,
         rows: s.tower.rows.map((r) => ({ ...r })),
         buried: Object.fromEntries(Object.entries(s.tower.buried || {})
           .map(([pid, d]) => [pid, { cleared: d.cleared }])),

@@ -160,6 +160,7 @@ function installDebug() {
         difficulty: S.engine.tower.difficulty,
         buried: Object.fromEntries(Object.entries(S.engine.tower.buried)
           .map(([pid, d]) => [pid, { cleared: d.cleared, words: [...d.words] }])),
+        offer: S.engine.tower.offer ? { options: S.engine.tower.offer.options } : null,
         rows: S.engine.tower.rows.map((r) => ({ ...r })),
       },
       players: S.engine.players.map((p) => ({ ...p })),
@@ -177,6 +178,8 @@ function installDebug() {
         combo: S.mirror.tower.combo, constraint: S.mirror.tower.constraint,
         lives: { ...S.mirror.tower.lives },
         digNeed: S.mirror.digNeed(),
+        offer: S.mirror.tower.offer
+          ? { options: S.mirror.tower.offer.options.map((c) => ({ ...c })) } : null,
         rows: S.mirror.tower.rows.map((r) => ({ ...r })),
         buried: Object.fromEntries(Object.entries(S.mirror.tower.buried)
           .map(([k, v]) => [k, { cleared: v.cleared }])),
@@ -197,6 +200,7 @@ function installDebug() {
     enter: () => S.mirror.enter(),
     backspace: () => S.mirror.backspace(),
     buy: (item, target) => S.mirror.buy(item, target),
+    pickDecree: (i) => S.mirror.pickDecree(i),
     quit: () => quitToMenu(),
   };
 }

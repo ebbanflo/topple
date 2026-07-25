@@ -167,6 +167,11 @@
       <h3>SCORING</h3>
       <p>Each floor scores base &times; letter values &times; <b>stage</b>, inflated by your
       <b>combo</b> (every consecutive good word, team-wide). Numbers are meant to be absurd.</p>
+      <h3>THE DRAFT</h3>
+      <p>Every time the decree changes, the tower deals you <b>three</b> instead of imposing one.
+      <b>Any</b> player can pick and the <b>first tap decides for the room</b>, so argue fast. The
+      old decree stays live while you're choosing and the hunger bar keeps draining &mdash;
+      dithering costs blood. Nobody picks in time? The tower picks for you.</p>
       <h3>BURIED &mdash; DIG OUT</h3>
       <p>Hitting zero lives does <b>not</b> put you out. You're <b>buried</b>, and you keep typing
       &mdash; but your words dig instead of build. Land <b>three</b> real words that obey the
@@ -179,6 +184,15 @@
       if the last five floors happen to spell <b>T-O-W-E-R</b> straight down any one column, the
       tower blesses you with another.</p>
       <button id="btn-help-close" class="btn-big">GOT IT</button>
+    </div>
+  </div>
+
+  <div id="ovl-draft" class="overlay hidden">
+    <div class="draft-card">
+      <h2 id="draft-title">THE TOWER OFFERS</h2>
+      <p class="draft-sub">pick one &mdash; first tap decides for the room</p>
+      <div id="draft-options" class="draft-options"></div>
+      <p id="draft-timer" class="draft-timer"></p>
     </div>
   </div>
 

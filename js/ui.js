@@ -2,7 +2,7 @@
 // through it. The tower itself is delegated to tower3d.js.
 
 import { WORD_LEN, SHOP, DEFAULT_SETTINGS, STORE } from './config.js';
-import { describeConstraint } from './decree.js';
+import { describeConstraint, countRecognizable } from './decree.js';
 import { el, now } from './util.js';
 import { sfx, soundEnabled, setSound } from './audio.js';
 import { Tower3D } from './tower3d.js';
@@ -158,6 +158,7 @@ export class UI {
       if (['inp-name', 'inp-code'].includes(document.activeElement?.id)) return;
       if (this.paused || !$('ovl-help').classList.contains('hidden')) return;
       if (!$('ovl-picker').classList.contains('hidden')) return;
+      if (!$('ovl-draft').classList.contains('hidden')) return;
       if (/^[a-zA-Z]$/.test(e.key)) this.pressKey(e.key.toLowerCase());
       else if (e.key === 'Enter') this.pressKey('⏎');
       else if (e.key === 'Backspace') this.pressKey('⌫');
@@ -226,6 +227,7 @@ export class UI {
             this.renderShop();
         sfx.join();
         break;
+      case 'offer': this.showDraft(); break;
       case 'tower': this.onDecree(d); break;
       case 'towerword': this.onTowerWord(d); break;
       case 'towermiss': this.onTowerMiss(d); break;
@@ -318,6 +320,7 @@ export class UI {
   onDecree(d) {
     const m = this.mirror;
     if (!m.tower) return;
+    this.closeDraft();
     this.show('scr-game');
     $('decree').textContent = describeConstraint(m.tower.constraint);
     $('decree').classList.remove('swap');
@@ -329,7 +332,10 @@ export class UI {
     this.renderStrip();
     this.renderShop();
     if (m.tower.stage > 1) {
-      this.showToast(`STAGE ${m.tower.stage} — NEW DECREE`);
+      const who = d && d.pickedBy ? m.player(d.pickedBy) : null;
+      this.showToast(who
+        ? `${who.name} CHOSE — STAGE ${m.tower.stage}`
+        : `STAGE ${m.tower.stage} — NEW DECREE`);
       sfx.stage();
     }
   }
@@ -483,6 +489,35 @@ export class UI {
     this.renderShop();
   }
 
+  // ---------- decree draft ----------
+  showDraft() {
+    const m = this.mirror;
+    const offer = m.myOffer();
+    if (!offer) return;
+    const box = $('draft-options');
+    box.replaceChildren();
+    offer.options.forEach((c, i) => {
+      // How much room the decree leaves, counted over the curated answer bank
+      // rather than the full dictionary - "words you'd actually think of", not
+      // "words that exist". countRecognizable early-exits at the cap, so the
+      // number is exact below it and honestly reported as "300+" above.
+      const n = countRecognizable(c, 300);
+      const gauge = n >= 300 ? '300+ COMMON WORDS'
+        : `~${n} COMMON WORD${n === 1 ? '' : 'S'}`;
+      box.append(el('button', {
+        class: 'draft-opt', 'data-testid': `draft-${i}`,
+        style: { animationDelay: `${i * 0.06}s` },
+        onclick: () => { m.pickDecree(i); sfx.ret(); },
+      },
+      el('span', { class: 'draft-rule', text: describeConstraint(c) }),
+      el('span', { class: 'draft-gauge', text: gauge })));
+    });
+    $('ovl-draft').classList.remove('hidden');
+    sfx.bell();
+  }
+
+  closeDraft() { $('ovl-draft').classList.add('hidden'); }
+
   // ---------- keyboard ----------
   pressKey(ch) {
     const m = this.mirror;
@@ -559,6 +594,7 @@ export class UI {
     // The fall is the payoff: play it in place, then cut to the rubble.
     this.setPaused(false);
     this.closePicker();
+    this.closeDraft();
     this.tower3d.collapse();
     sfx.collapse();
     $('decree').textContent = 'THE TOWER FALLS';
@@ -601,6 +637,7 @@ export class UI {
       this.renderTowerHud();
       this.renderTowerInput();
       this.renderShop();
+      if (m.myOffer()) this.showDraft(); else this.closeDraft();
     }
   }
 
@@ -611,6 +648,13 @@ export class UI {
     this.tower3d.setYaw(Math.sin(now() / 4600) * 8);
     if (!m || m.over || !m.tower) return;
     const t = m.tower;
+    const offer = m.myOffer();
+    if (offer) {
+      const secs = Math.max(0, Math.ceil((offer.until - now()) / 1000));
+      $('draft-timer').textContent = `THE TOWER DECIDES IN ${secs}`;
+    } else if (!$('ovl-draft').classList.contains('hidden')) {
+      this.closeDraft();
+    }
     const fill = $('hunger-fill');
     const left = Math.max(0, (t.hungerAt || 0) - now());
     const pct = Math.min(100, (left / t.hungerMs) * 100);

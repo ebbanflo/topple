@@ -14,6 +14,7 @@ export const IN = {
   GUESS: 'guess',       // {x: obfuscated word}  (a tower word, or a dig word)
   BUY: 'buy',           // {item, target?}
   QUIT: 'quit',         // {} (sender leaves; host handles + mirrors)
+  DECREE_PICK: 'pick',  // {index} choose one of the offered decrees
   RESYNC: 'resyncreq',  // {} ask host for a full snapshot
 };
 
@@ -24,7 +25,8 @@ export const EV = {
   START: 'start',        // {settings, players}
   SCORES: 'scores',      // {scores, buyer?, item?}
   SHOP_ERR: 'shoperr',   // {to, reason}
-  TOWER: 'twr',          // {stage, constraint, height, hungerMs, lives, scores, combo}
+  DECREE_OFFER: 'offer', // {stage, options:[constraint], ms} pick one, first pick wins
+  TOWER: 'twr',          // {stage, constraint, height, hungerMs, lives, scores, combo, pickedBy?}
   TOWER_WORD: 'twrword', // {pid, word, points, height, combo, stage}
   TOWER_MISS: 'twrmiss', // {pid, word, reason, lives, combo}
   TOWER_HUNGER: 'twrhunger', // {lives, downed}

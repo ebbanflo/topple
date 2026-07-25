@@ -709,6 +709,36 @@ input, button { font-family: inherit; color: inherit; }
 .toast.pop { animation: toast-in .26s cubic-bezier(.2, .9, .25, 1); }
 @keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
 
+/* ---------- decree draft ---------- */
+.draft-card {
+  width: min(30rem, 94vw);
+  padding: 1.1rem;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  display: flex; flex-direction: column; gap: .6rem;
+}
+.draft-card h2 { font-size: .8rem; letter-spacing: .26em; margin: 0; text-align: center; }
+.draft-sub { font-size: .64rem; letter-spacing: .14em; color: var(--ink-3); text-align: center; margin: 0; }
+.draft-options { display: flex; flex-direction: column; gap: .5rem; }
+.draft-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: .3rem;
+  width: 100%;
+  padding: .75rem .8rem;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--ink-3);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .12s cubic-bezier(.2,.9,.25,1);
+  animation: screen-in .28s cubic-bezier(.2, .9, .25, 1) both;
+}
+.draft-opt:hover { border-left-color: var(--ink); }
+.draft-opt:active { transform: translateY(2px) scale(.99); background: var(--ink); color: var(--paper); }
+.draft-rule { font-size: .84rem; font-weight: 700; letter-spacing: .1em; line-height: 1.35; }
+.draft-gauge { font-size: .58rem; letter-spacing: .2em; color: var(--ink-3); }
+.draft-timer { font-size: .6rem; letter-spacing: .2em; color: var(--ink-2); text-align: center; margin: 0; }
+
 /* ---------- game over ---------- */
 .over-title { margin: .4rem 0 0; font-size: clamp(1.8rem, 11vw, 3rem); font-weight: 700; letter-spacing: .12em; animation: glyph-set .45s cubic-bezier(.2, .9, .25, 1) both; }
 .over-sub { margin: 0; font-size: .72rem; letter-spacing: .1em; color: var(--ink-2); text-align: center; }

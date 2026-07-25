@@ -4,12 +4,12 @@
 // and mirror the host's broadcasts (EV.*).
 
 import {
-  MAX_PLAYERS, MIN_PLAYERS, WORD_LEN,
+  MAX_PLAYERS, MIN_PLAYERS, WORD_LEN, DECREE_OPTIONS,
   SHOP, DEFAULT_SETTINGS, PLAYER_COLORS, LEAVE_GRACE_MS, TOWER,
 } from './config.js';
 import { EV, IN } from './protocol.js';
 import { isValidGuess } from './words.js';
-import { matchesConstraint, genConstraint, wordPoints } from './decree.js';
+import { matchesConstraint, genConstraint, describeConstraint, wordPoints } from './decree.js';
 import { deobf, now } from './util.js';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard', 'ramp'];
@@ -33,6 +33,7 @@ export class Engine {
     net.on(IN.JOIN, (d, from) => this.onJoin(d, from));
     net.on(IN.GUESS, (d, from) => this.onTowerGuess(d, from));
     net.on(IN.BUY, (d, from) => this.onBuy(d, from));
+    net.on(IN.DECREE_PICK, (d, from) => this.onDecreePick(d, from));
     net.on(IN.QUIT, (_d, from) => this.onLeave(from, 'quit'));
     net.on(IN.RESYNC, (_d, from) => this.sendResync(from));
 
@@ -160,19 +161,68 @@ export class Engine {
       hungerMs: this.settings.hungerMs ?? TOWER.hungerMs,
       difficulty: DIFFICULTIES.includes(this.settings.difficulty) ? this.settings.difficulty : 'ramp',
       constraint: null,
+      offer: null,              // a decree draft in flight, if any
     };
     this.tower.constraint = genConstraint(1, this.tower.used, this.tower.difficulty, this.tower.rampWords);
     this.broadcastTower();
     this.armHunger();
   }
 
-  broadcastTower() {
+  broadcastTower(extra = {}) {
     const t = this.tower;
     this.net.emit(EV.TOWER, {
       stage: t.stage, constraint: t.constraint, height: t.height,
       hungerMs: t.hungerMs, lives: { ...t.lives }, scores: this.scoreMap(),
-      combo: t.combo,
+      combo: t.combo, digNeed: TOWER.digWords, ...extra,
     });
+  }
+
+  // ---------- the decree draft ----------
+  // A stage change deals the team DECREE_OPTIONS decrees instead of imposing
+  // one. The OLD decree stays live until somebody picks, so the draft costs the
+  // tower no time at all - and the hunger clock keeps running, so dithering
+  // costs blood.
+  offerDecrees() {
+    const t = this.tower;
+    const options = [];
+    const seen = new Set([describeConstraint(t.constraint)]);
+    for (let tries = 0; tries < 30 && options.length < DECREE_OPTIONS; tries++) {
+      const c = genConstraint(t.stage, t.used, t.difficulty, t.rampWords, t.constraint);
+      const desc = describeConstraint(c);
+      if (seen.has(desc)) continue; // three identical choices is not a choice
+      seen.add(desc);
+      options.push(c);
+    }
+    if (options.length === 0) { // pool exhausted this deep: just move on
+      t.constraint = genConstraint(t.stage, t.used, t.difficulty, t.rampWords, t.constraint);
+      this.broadcastTower();
+      return;
+    }
+    t.offer = { options };
+    const ms = this.settings.draftMs ?? DEFAULT_SETTINGS.draftMs;
+    this.net.emit(EV.DECREE_OFFER, { stage: t.stage, options, ms });
+    clearTimeout(this.timers.draft);
+    this.timers.draft = setTimeout(() => this.resolveDraft(0, null), ms);
+  }
+
+  onDecreePick(d, from) {
+    const t = this.tower;
+    if (!t || !t.offer || this.over) return;
+    const i = Number(d.index);
+    if (!Number.isInteger(i) || i < 0 || i >= t.offer.options.length) return;
+    this.resolveDraft(i, from);
+  }
+
+  // First pick received wins. A late second pick finds no offer and is ignored,
+  // so two players tapping at once can never both count.
+  resolveDraft(index, by) {
+    const t = this.tower;
+    if (!t || !t.offer) return;
+    clearTimeout(this.timers.draft);
+    const chosen = t.offer.options[index] || t.offer.options[0];
+    t.offer = null;
+    t.constraint = chosen;
+    this.broadcastTower({ pickedBy: by });
   }
 
   armHunger() {
@@ -297,12 +347,12 @@ export class Engine {
       this.grantHearts('spelled');
     }
 
-    if (t.wordsInStage >= t.rampWords) {
+    // A draft already in flight holds the stage where it is - the team can keep
+    // climbing under the old decree while they decide.
+    if (t.wordsInStage >= t.rampWords && !t.offer) {
       t.stage += 1;
       t.wordsInStage = 0;
-      // pass the outgoing decree so the new one is never an identical repeat
-      t.constraint = genConstraint(t.stage, t.used, t.difficulty, t.rampWords, t.constraint);
-      this.broadcastTower();
+      this.offerDecrees();
     }
   }
 
@@ -483,6 +533,7 @@ export class Engine {
         hungerMs: this.tower.hungerMs, lives: { ...this.tower.lives },
         rows: this.tower.rows.slice(-40),
         digNeed: TOWER.digWords,
+        offer: this.tower.offer ? { options: this.tower.offer.options } : null,
         buried: Object.fromEntries(Object.entries(this.tower.buried)
           .map(([pid, d]) => [pid, { cleared: d.cleared }])),
       } : null,
@@ -491,7 +542,7 @@ export class Engine {
   }
 
   clearTimers() {
-    for (const k of ['next', 'hunger']) {
+    for (const k of ['next', 'hunger', 'draft']) {
       clearTimeout(this.timers[k]);
       this.timers[k] = null;
     }

@@ -12,7 +12,7 @@ export async function openPage(context) {
 }
 
 // Fast settings used by most runs (humans get slower beats; tests don't).
-export const FAST = { revealMs: 350, countdownMs: 120 };
+export const FAST = { revealMs: 350, countdownMs: 120, draftMs: 300 };
 
 export async function hostGame(page, name, settings) {
   await page.fill('#inp-name', name);

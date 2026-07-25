@@ -55,6 +55,11 @@ export const TOWER = {
 
 export const DECREE_CHOICES = [3, 5, 10];
 
+// At every stage change the team is dealt this many decrees and picks one.
+// First pick received wins; if nobody picks in time the first option is taken,
+// so a distracted room can never stall the tower.
+export const DECREE_OPTIONS = 3;
+
 export const SHOP = {
   rope: {
     price: TOWER.ropeCost, glyph: '✦', name: 'ROPE',
@@ -78,6 +83,7 @@ export const DEFAULT_SETTINGS = {
   rampWords: TOWER.defaultRampWords, // words per decree, host-set 3/5/10
   revealMs: 4000,                    // pacing beat (tests shrink it)
   countdownMs: 1200,                 // pre-run beat (tests shrink it)
+  draftMs: 9000,                     // decree draft window (tests shrink it)
 };
 
 // Signature accents by join order. Deliberately restrained: the page is ink on
