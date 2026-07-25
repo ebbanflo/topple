@@ -31,8 +31,8 @@ export function pick(arr) { return arr[rand(arr.length)]; }
 export const now = () => Date.now();
 
 // Light obfuscation for words in transit (broadcast channels are public; this
-// keeps the revive secret and rival guesses out of casual network-tab
-// plaintext - it is NOT cryptography).
+// keeps other players' words out of casual network-tab plaintext - it is NOT
+// cryptography).
 export function obf(word, key) {
   const k = 'topple■' + key;
   let out = '';

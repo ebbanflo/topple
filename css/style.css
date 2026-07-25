@@ -331,10 +331,11 @@ input, button { font-family: inherit; color: inherit; }
   animation: crawl 1.1s linear infinite;
 }
 @keyframes crawl { to { background-position: 12px 0; } }
-.hunger-label { font-size: .58rem; line-height: .9rem; height: .9rem; letter-spacing: .2em; color: var(--ink-2); }
-/* visibility (not display:none) — its space stays reserved so a rescue
-   starting or ending never shifts the tower or the keyboard */
-.hunger-label.inactive { visibility: hidden; }
+.status-line { font-size: .58rem; line-height: .9rem; height: .9rem; letter-spacing: .2em; color: var(--ink-2); }
+/* visibility (not display:none) — its space stays reserved so burying or
+   freeing a player never shifts the tower or the keyboard */
+.status-line.inactive { visibility: hidden; }
+.status-line.buried { color: var(--ink); font-weight: 700; }
 
 .players-strip { width: 100%; display: flex; gap: .3rem; }
 .strip-p {
@@ -350,6 +351,7 @@ input, button { font-family: inherit; color: inherit; }
 .strip-p.gone { opacity: .22; text-decoration: line-through; }
 .strip-name { font-size: .55rem; line-height: .8rem; height: .8rem; letter-spacing: .1em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strip-score { font-size: .78rem; line-height: 1rem; height: 1rem; font-weight: 700; letter-spacing: .04em; }
+.strip-hearts.digging { color: var(--ink-3); }
 .strip-hearts { font-size: .58rem; line-height: .8rem; height: .8rem; overflow: hidden; letter-spacing: .08em; color: var(--sig, var(--ink)); }
 
 /* ================= THE TOWER (CSS 3D) ================= */
@@ -573,10 +575,6 @@ input, button { font-family: inherit; color: inherit; }
   background: transparent;
   transition: border-color .14s ease, background .14s ease, color .14s ease, transform .14s cubic-bezier(.2, .9, .25, 1);
 }
-.tile.g { background: var(--g); border-color: var(--g); color: var(--on-fill); }
-.tile.y { background: var(--y); border-color: var(--y); color: var(--on-fill); }
-.tile.x { background: var(--x); border-color: transparent; color: var(--on-fill); }
-
 .tower-input { display: flex; gap: .32rem; justify-content: center; }
 .tower-tile {
   width: 2.5rem; height: 2.5rem;
@@ -590,7 +588,7 @@ input, button { font-family: inherit; color: inherit; }
   animation: tile-pop .16s cubic-bezier(.2, .9, .25, 1);
 }
 @keyframes tile-pop { 0% { transform: scale(.86); } 100% { transform: scale(1); } }
-.tower-input.downed { opacity: .22; }
+
 .tower-input.shake { animation: shake .34s cubic-bezier(.36, .07, .19, .97); }
 @keyframes shake {
   10%, 90% { transform: translateX(-2px); }
@@ -599,20 +597,8 @@ input, button { font-family: inherit; color: inherit; }
   40%, 60% { transform: translateX(7px); }
 }
 
-.revive-box {
-  width: 100%;
-  flex: 1 1 0;                  /* takes the tower's place exactly */
-  min-height: 0;
-  overflow: hidden;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem;
-  border: 1px dashed var(--rule);
-  animation: screen-in .24s cubic-bezier(.2, .9, .25, 1) both;
-}
-.revive-title { margin: 0; font-size: .68rem; letter-spacing: .2em; color: var(--ink-2); }
-.board { display: flex; flex-direction: column; gap: .22rem; }
-.brow { display: flex; gap: .22rem; }
-.tile.mini { width: 2.1rem; height: 2.1rem; font-size: 1rem; }
-.tile.active-row { border-color: var(--ink); }
+/* the tower input row while buried: the tiles read as rubble to be cleared */
+.tower-input.buried .tower-tile { border-style: dashed; }
 
 /* ---------- shop ---------- */
 .shop { display: flex; justify-content: center; width: 100%; }
@@ -652,9 +638,6 @@ input, button { font-family: inherit; color: inherit; }
 }
 .key:active { transform: translateY(2px) scale(.97); background: var(--ink); color: var(--paper); }
 .key-wide { flex: 1.6; font-size: .62rem; letter-spacing: .1em; }
-.key.g { background: var(--g); border-color: var(--g); color: var(--on-fill); }
-.key.y { background: var(--y); border-color: var(--y); color: var(--on-fill); }
-.key.x { opacity: .3; }
 .key.ripple::after {
   content: '';
   position: absolute; inset: 0;

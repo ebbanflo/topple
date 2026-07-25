@@ -5,7 +5,6 @@
 
 import { WORD_LEN } from './config.js';
 import { EV, IN, HOST_BROADCASTS } from './protocol.js';
-import { isValidGuess } from './words.js';
 import { obf, now } from './util.js';
 
 export class Mirror {
@@ -35,14 +34,13 @@ export class Mirror {
       [EV.LOBBY]: (d) => this.onLobby(d),
       [EV.JOIN_ERR]: (d) => { if (d.to === selfId) { this.joinError = d.reason; this.fire('joinerr', d); } },
       [EV.START]: (d) => this.onStart(d),
-      [EV.BAD_GUESS]: (d) => this.onBadGuess(d),
       [EV.SCORES]: (d) => this.onScores(d),
       [EV.SHOP_ERR]: (d) => { if (d.to === selfId) { this.showToast(d.reason); this.fire('shoperr', d); } },
       [EV.TOWER]: (d) => this.onTower(d),
       [EV.TOWER_WORD]: (d) => this.onTowerWord(d),
       [EV.TOWER_MISS]: (d) => this.onTowerMiss(d),
       [EV.TOWER_HUNGER]: (d) => this.onTowerHunger(d),
-      [EV.TOWER_REVIVE]: (d) => this.onTowerRevive(d),
+      [EV.DIG]: (d) => this.onDig(d),
       [EV.TOWER_BONUS]: (d) => this.onTowerBonus(d),
       [EV.PLAYER_LEFT]: (d) => this.onPlayerLeft(d),
       [EV.GAME_OVER]: (d) => this.onGameOver(d),
@@ -93,13 +91,6 @@ export class Mirror {
     this.fire('start', d);
   }
 
-  onBadGuess(d) {
-    if (d.to !== this.selfId) return;
-    this.pendingTower = 0;
-    this.showToast('Not in the dictionary');
-    this.fire('badguess', d);
-  }
-
   onScores(d) { this.applyScores(d.scores); this.fire('scores', d); }
 
   applyScores(scores) {
@@ -110,7 +101,7 @@ export class Mirror {
   }
 
   onTower(d) {
-    const t = this.tower || (this.tower = { rows: [], revives: {} });
+    const t = this.tower || (this.tower = { rows: [], buried: {} });
     const hadStage = t.stage;
     t.stage = d.stage;
     t.constraint = d.constraint;
@@ -118,9 +109,8 @@ export class Mirror {
     t.combo = d.combo;
     t.hungerMs = d.hungerMs;
     t.lives = d.lives;
-    // a stage-change broadcast can land mid-revive (another player kept
-    // climbing while paused) - don't resurrect a countdown that should stay frozen
-    if (!t.hungerPaused) t.hungerAt = now() + d.hungerMs;
+    t.hungerAt = now() + d.hungerMs;
+    t.digNeed = d.digNeed ?? t.digNeed ?? 3;
     this.applyScores(d.scores);
     this.fire('tower', { ...d, fresh: hadStage == null });
   }
@@ -133,7 +123,7 @@ export class Mirror {
     t.height = d.height;
     t.combo = d.combo;
     t.stage = d.stage;
-    if (!t.hungerPaused) t.hungerAt = now() + t.hungerMs;
+    t.hungerAt = now() + t.hungerMs;
     const p = this.player(d.pid);
     if (p) p.score += d.points; // lean protocol: deltas, not snapshots
     if (d.pid === this.selfId) this.pendingTower = 0;
@@ -145,9 +135,12 @@ export class Mirror {
     if (!t) return;
     t.lives = d.lives;
     t.combo = 0;
+    this.syncBuried();
     if (d.pid === this.selfId) {
       this.pendingTower = 0;
-      this.showToast(`"${d.word.toUpperCase()}" — ${d.reason}`);
+      this.showToast(d.buried
+        ? `"${d.word.toUpperCase()}" — ${d.reason}. BURIED — dig yourself out.`
+        : `"${d.word.toUpperCase()}" — ${d.reason}`);
     }
     this.fire('towermiss', d);
   }
@@ -158,52 +151,62 @@ export class Mirror {
     t.lives = d.lives;
     t.combo = 0;
     t.hungerAt = now() + t.hungerMs;
+    this.syncBuried();
     this.showToast('THE TOWER HUNGERS — everyone bleeds');
     this.fire('towerhunger', d);
   }
 
-  onTowerRevive(d) {
+  onDig(d) {
     const t = this.tower;
     if (!t) return;
-    if (d.phase === 'start') {
-      t.revives[d.reviver] = { target: d.target, rows: [] };
-      if (d.paused) { t.hungerPaused = true; t.hungerAt = null; }
-      if (d.reviver === this.selfId) { this.input = ''; this.pendingTower = 0; }
-    } else if (d.phase === 'row') {
-      const rev = t.revives[d.reviver];
-      if (rev) rev.rows[d.row] = { word: d.word, colors: d.colors };
-      if (d.reviver === this.selfId) { this.input = ''; this.pendingTower = 0; }
-    } else if (d.phase === 'end') {
-      delete t.revives[d.reviver];
+    if (d.phase === 'out') {
+      delete t.buried[d.pid];
       if (d.lives) t.lives = d.lives;
-      if (d.resumed) { t.hungerPaused = false; t.hungerAt = now() + t.hungerMs; }
-      if (d.reviver === this.selfId) this.pendingTower = 0;
+    } else {
+      const dig = t.buried[d.pid] || (t.buried[d.pid] = { cleared: 0 });
+      dig.cleared = d.cleared;
     }
-    this.fire('towerrev', d);
+    if (d.pid === this.selfId) {
+      this.pendingTower = 0;
+      if (d.rejected) this.showToast(`"${d.word.toUpperCase()}" — ${d.rejected}`);
+    }
+    this.fire('dig', d);
   }
 
   onTowerBonus(d) {
     const t = this.tower;
-    if (t) t.lives = d.lives;
+    if (t) { t.lives = d.lives; this.syncBuried(); }
     this.fire('towerbonus', d);
   }
 
-  myRevive() {
-    return (this.tower && this.tower.revives[this.selfId]) || null;
+  // Burial is derived from lives on the host (Engine.syncBuried); mirror the
+  // same derivation here so a lives-only broadcast can never leave a client
+  // showing someone as buried when they are not.
+  syncBuried() {
+    const t = this.tower;
+    if (!t) return;
+    for (const p of this.players) {
+      const alive = (t.lives[p.id] ?? 0) > 0;
+      if (!alive && !t.buried[p.id]) t.buried[p.id] = { cleared: 0 };
+      else if (alive && t.buried[p.id]) delete t.buried[p.id];
+    }
   }
 
   myTowerLives() {
     return this.tower ? (this.tower.lives[this.selfId] ?? 0) : 0;
   }
 
+  myDig() {
+    return (this.tower && this.tower.buried[this.selfId]) || null;
+  }
+
+  digNeed() { return (this.tower && this.tower.digNeed) || 3; }
+
   submitTower() {
     const word = this.input;
     if (word.length !== WORD_LEN) { this.fire('shake', {}); return false; }
-    if (this.myRevive()) {
-      // the rescue wordle is classic rules - typos are free here
-      if (!isValidGuess(word)) { this.showToast('Not in dictionary'); this.fire('shake', {}); return false; }
-    }
-    // tower words are NOT pre-checked: the host judges, misses cost a life
+    // Words are NOT pre-checked: the host judges. A miss costs a life while
+    // you are standing, and costs nothing at all while you are buried.
     this.pendingTower = now();
     this.input = '';
     this.net.emit(IN.GUESS, { x: obf(word, this.code) });
@@ -232,17 +235,15 @@ export class Mirror {
     this.input = '';
     this.pendingTower = 0;
     if (s.tower) {
-      const hungerPaused = !!s.tower.hungerPaused;
       this.tower = {
         stage: s.tower.stage, constraint: s.tower.constraint,
         height: s.tower.height, combo: s.tower.combo,
         hungerMs: s.tower.hungerMs, lives: { ...s.tower.lives },
-        hungerPaused,
-        hungerAt: hungerPaused ? null : now() + s.tower.hungerMs,
+        hungerAt: now() + s.tower.hungerMs,
+        digNeed: s.tower.digNeed ?? 3,
         rows: s.tower.rows.map((r) => ({ ...r })),
-        revives: Object.fromEntries((s.tower.reviving || []).map((r) => [
-          r.reviver, { target: r.target, rows: r.rows.map((x) => ({ ...x })) },
-        ])),
+        buried: Object.fromEntries(Object.entries(s.tower.buried || {})
+          .map(([pid, d]) => [pid, { cleared: d.cleared }])),
       };
     } else {
       this.tower = null;
@@ -250,27 +251,9 @@ export class Mirror {
     this.fire('resync', s);
   }
 
-  // ---------- keyboard state (the rescue wordle only) ----------
-  keyboardState() {
-    const rank = { g: 3, y: 2, x: 1 };
-    const best = {};
-    const rev = this.myRevive();
-    if (!rev) return best;
-    for (const row of rev.rows) {
-      if (!row || !row.word) continue;
-      for (let j = 0; j < row.word.length; j++) {
-        const L = row.word[j];
-        const c = row.colors[j];
-        if ((rank[c] || 0) > (rank[best[L]] || 0)) best[L] = c;
-      }
-    }
-    return best;
-  }
-
+  // Buried players are NOT locked out - digging is the whole point.
   inputLocked() {
     if (!this.started || this.over || !this.tower) return true;
-    if (this.myRevive()) return false;          // typing the rescue wordle
-    if (this.myTowerLives() <= 0) return true;  // downed players watch
     return this.pendingTower > 0 && now() - this.pendingTower < 1500;
   }
 

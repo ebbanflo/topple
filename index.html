@@ -103,15 +103,12 @@
         <span id="tower-combo" class="rpg-stat combo-stat"></span>
       </div>
       <div id="hunger-bar" class="hunger-bar" title="the tower hungers"><div id="hunger-fill"></div></div>
-      <div id="hunger-label" class="hunger-label inactive">REVIVING &mdash; CLOCK PAUSED</div>
+      <!-- fixed-height status line, visibility-toggled so the band it occupies
+           is reserved whether or not anyone is buried (see the layout contract) -->
+      <div id="status-line" class="status-line inactive"></div>
     </div>
 
     <div id="players-strip" class="players-strip"></div>
-
-    <div id="revive-box" class="revive-box hidden">
-      <p id="revive-title" class="revive-title"></p>
-      <div id="revive-board" class="board revive-board"></div>
-    </div>
 
     <div id="tower-area" class="tower-area">
       <div id="tower-scene" class="t3d-stage" aria-label="the tower"></div>
@@ -170,11 +167,13 @@
       <h3>SCORING</h3>
       <p>Each floor scores base &times; letter values &times; <b>stage</b>, inflated by your
       <b>combo</b> (every consecutive good word, team-wide). Numbers are meant to be absurd.</p>
-      <h3>REVIVE ✦</h3>
-      <p>Down a teammate? Anyone still standing can spend <b>5,000</b> points to start a rescue:
-      solve one plain wordle and they're back with 2 lives. Starting a rescue <b>pauses the hunger
-      clock for the whole room</b> &mdash; it's untimed &mdash; and it resumes with a fresh window
-      once the rescue ends. Everyone watches the letters.</p>
+      <h3>BURIED &mdash; DIG OUT</h3>
+      <p>Hitting zero lives does <b>not</b> put you out. You're <b>buried</b>, and you keep typing
+      &mdash; but your words dig instead of build. Land <b>three</b> real words that obey the
+      current decree and you climb out with one life. Dig words score nothing, add no floors and
+      don't touch the combo, and a wrong one costs you nothing (you're already at zero). A teammate
+      still standing can spend <b>2,000</b> points on a <b>✦ ROPE</b> to clear one of your three
+      for you. The tower only falls when <em>everybody</em> is buried at once.</p>
       <h3>BLESSINGS</h3>
       <p>Every <b>10th floor</b>, the whole team gets a bonus heart (including anyone at zero). And
       if the last five floors happen to spell <b>T-O-W-E-R</b> straight down any one column, the

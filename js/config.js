@@ -20,7 +20,6 @@ export const CODE_LEN = 4;
 export const MIN_PLAYERS = 1;   // TOPPLE is co-op: solo is a legitimate run
 export const MAX_PLAYERS = 4;
 export const WORD_LEN = 5;
-export const MAX_ROWS = 6;      // the revive wordle's grid
 
 // TOWER (the whole game): co-op, 1-4 players, endless. Stack valid words under
 // an escalating DECREE. Misses cost lives; the hunger clock keeps the team
@@ -28,8 +27,11 @@ export const MAX_ROWS = 6;      // the revive wordle's grid
 export const TOWER = {
   lives: 3,
   maxLives: 5,             // cap for bonus hearts (milestones/easter eggs)
-  reviveCost: 5000,
-  reviveLives: 2,          // a revived teammate comes back with 2
+  // Being at zero lives is BURIED, not out: you keep typing, and words that
+  // obey the decree dig you out instead of building the tower.
+  digWords: 3,             // decree-obeying words needed to climb out
+  digReturnLives: 1,       // you come back with this many
+  ropeCost: 2000,          // a teammate can buy away ONE of those words
   // Words needed per decree before it escalates - host-set directly (see
   // DECREE_CHOICES below), independent of the DIFFICULTY setting.
   // Counterintuitively, a LOW count plays easier: the team cycles to a
@@ -54,10 +56,10 @@ export const TOWER = {
 export const DECREE_CHOICES = [3, 5, 10];
 
 export const SHOP = {
-  revive: {
-    price: TOWER.reviveCost, glyph: '✦', name: 'REVIVE',
-    desc: 'Solve a plain wordle to bring a fallen teammate back with 2 lives',
-    target: 'downed',
+  rope: {
+    price: TOWER.ropeCost, glyph: '✦', name: 'ROPE',
+    desc: 'Throw a rope to a buried teammate — clears one of their dig words',
+    target: 'buried',
   },
 };
 

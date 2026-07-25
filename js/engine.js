@@ -2,16 +2,13 @@
 // decrees, validates every word and purchase, keeps every life, combo and
 // score, and runs the hunger clock. Guests only send intents (protocol.js IN.*)
 // and mirror the host's broadcasts (EV.*).
-//
-// The revive rescue word never appears in any broadcast until that rescue ends
-// - only color strings go over the wire.
 
 import {
-  MAX_PLAYERS, MIN_PLAYERS, MAX_ROWS, WORD_LEN,
+  MAX_PLAYERS, MIN_PLAYERS, WORD_LEN,
   SHOP, DEFAULT_SETTINGS, PLAYER_COLORS, LEAVE_GRACE_MS, TOWER,
 } from './config.js';
 import { EV, IN } from './protocol.js';
-import { pickWord, scoreGuess, isValidGuess } from './words.js';
+import { isValidGuess } from './words.js';
 import { matchesConstraint, genConstraint, wordPoints } from './decree.js';
 import { deobf, now } from './util.js';
 
@@ -26,7 +23,6 @@ export class Engine {
     this.settings = { ...DEFAULT_SETTINGS };
     this.started = false;
     this.over = false;
-    this.usedWords = new Set();  // revive secrets, so a session never repeats one
     this.tower = null;
     this.missingSince = new Map();
     this.everSeen = new Set();   // peers confirmed via presence at least once
@@ -155,7 +151,9 @@ export class Engine {
       rows: [],                 // {pid, word, points}
       used: new Set(),
       lives: Object.fromEntries(this.activePlayers().map((p) => [p.id, TOWER.lives])),
-      revives: {},              // reviverPid -> {target, word, rows:[{word,colors}]}
+      // pid -> {cleared, words:[]} for every player currently at zero lives.
+      // Kept in lockstep with `lives` by syncBuried() so the two can never drift.
+      buried: {},
       // host-set 3/5/10 in the lobby (UI-clamped, not server-enforced - tests
       // intentionally pass values outside that range to freeze a stage).
       rampWords: this.settings.rampWords ?? TOWER.defaultRampWords,
@@ -183,6 +181,21 @@ export class Engine {
     this.timers.hunger = setTimeout(() => this.hungerStrike(), this.tower.hungerMs);
   }
 
+  // `lives` is the single source of truth; burial is derived from it. Call this
+  // after ANY change to lives and the two can never disagree - which is what
+  // makes bonus hearts, hunger strikes and digs all compose without special
+  // cases (a heart that lifts someone off zero un-buries them for free).
+  syncBuried() {
+    const t = this.tower;
+    const out = [];
+    for (const p of this.activePlayers()) {
+      const alive = (t.lives[p.id] ?? 0) > 0;
+      if (!alive && !t.buried[p.id]) t.buried[p.id] = { cleared: 0, words: [] };
+      else if (alive && t.buried[p.id]) { delete t.buried[p.id]; out.push(p.id); }
+    }
+    return out;
+  }
+
   // The tower demands words: silence bleeds every living player.
   hungerStrike() {
     const t = this.tower;
@@ -195,12 +208,14 @@ export class Engine {
       }
     }
     t.combo = 0;
+    this.syncBuried();
     this.net.emit(EV.TOWER_HUNGER, { lives: { ...t.lives }, downed });
-    if (this.everyoneDowned()) this.endTower();
+    if (this.everyoneBuried()) this.endTower();
     else this.armHunger();
   }
 
-  everyoneDowned() {
+  // The run ends only when NOBODY is left standing to dig anyone out.
+  everyoneBuried() {
     return this.activePlayers().every((p) => (this.tower.lives[p.id] ?? 0) <= 0);
   }
 
@@ -220,15 +235,16 @@ export class Engine {
   }
 
   // Team-wide bonus heart (milestone every N floors, or the T-O-W-E-R easter
-  // egg). Revives anyone currently downed - "everyone gets a heart" is
-  // literal, including whoever's at zero.
+  // egg). Lifts anyone currently buried straight out - "everyone gets a heart"
+  // is literal, including whoever is at zero.
   grantHearts(reason) {
     const t = this.tower;
     for (const p of this.activePlayers()) {
       const cur = t.lives[p.id] ?? 0;
       t.lives[p.id] = Math.min(TOWER.maxLives, cur + 1);
     }
-    this.net.emit(EV.TOWER_BONUS, { reason, lives: { ...t.lives }, height: t.height });
+    const freed = this.syncBuried(); // a heart lifts the buried straight out
+    this.net.emit(EV.TOWER_BONUS, { reason, lives: { ...t.lives }, height: t.height, freed });
   }
 
   // Easter egg: if the most recently placed 5 words, read down any single
@@ -246,25 +262,6 @@ export class Engine {
     return false;
   }
 
-  // A revive is meant to be an untimed puzzle: the shared hunger clock pauses
-  // while ANY revive is in flight, and only resumes (with a fresh full window)
-  // once none remain. Other players may keep climbing while paused - only the
-  // clock itself stops.
-  pauseHungerForRevive() {
-    const t = this.tower;
-    if (t.hungerPaused) return;
-    t.hungerPaused = true;
-    clearTimeout(this.timers.hunger);
-  }
-
-  resumeHungerIfIdle() {
-    const t = this.tower;
-    if (!t.hungerPaused || Object.keys(t.revives).length > 0) return false;
-    t.hungerPaused = false;
-    this.armHunger();
-    return true;
-  }
-
   onTowerGuess(d, from) {
     const t = this.tower;
     if (!t || this.over) return;
@@ -272,10 +269,8 @@ export class Engine {
     if (!p || !p.connected) return;
     const word = this.unwrapWord(d.x);
 
-    // A player mid-revive is playing their rescue wordle, not the tower.
-    if (t.revives[from]) return this.onReviveGuess(word, from);
-
-    if ((t.lives[from] ?? 0) <= 0) return; // downed players watch
+    // Buried players are still playing - their words dig, they don't build.
+    if ((t.lives[from] ?? 0) <= 0) return this.onDigGuess(word, from);
 
     if (!isValidGuess(word)) return this.towerMiss(from, word, 'not a word');
     if (this.towerOnScreen(word)) return this.towerMiss(from, word, 'already in the tower');
@@ -293,9 +288,7 @@ export class Engine {
     this.net.emit(EV.TOWER_WORD, {
       pid: from, word, points, height: t.height, combo: t.combo, stage: t.stage,
     });
-    // While a revive is in flight the clock stays paused regardless of what
-    // OTHER (non-reviving) players do - only the last revive ending re-arms it.
-    if (!t.hungerPaused) this.armHunger();
+    this.armHunger();
 
     if (Math.floor(t.height / TOWER.heartEveryHeight) > Math.floor((t.height - 1) / TOWER.heartEveryHeight)) {
       this.grantHearts('milestone');
@@ -317,55 +310,70 @@ export class Engine {
     const t = this.tower;
     t.lives[from] = Math.max(0, (t.lives[from] ?? 0) - 1);
     t.combo = 0;
+    this.syncBuried();
     this.net.emit(EV.TOWER_MISS, {
       pid: from, word, reason, lives: { ...t.lives }, combo: 0,
+      buried: (t.lives[from] ?? 0) <= 0,
     });
-    if (this.everyoneDowned()) this.endTower();
+    if (this.everyoneBuried()) this.endTower();
   }
 
-  onReviveBuy(d, from, fail) {
+  // A living teammate buys away one of a buried player's dig words. It costs
+  // points rather than time, so helping never stalls the tower.
+  onRopeBuy(d, from, fail) {
     const t = this.tower;
     const p = this.player(from);
     if (!t) return fail('No tower to climb');
-    if ((t.lives[from] ?? 0) <= 0) return fail('You are down yourself');
-    if (t.revives[from]) return fail('Already reviving');
+    if ((t.lives[from] ?? 0) <= 0) return fail('You are buried yourself');
     const target = this.player(d.target);
-    if (!target || (t.lives[target.id] ?? 0) > 0 || !target.connected) return fail('Pick a fallen teammate');
-    if (p.score < SHOP.revive.price) return fail(`Need ${SHOP.revive.price} points`);
-    p.score -= SHOP.revive.price;
-    const word = pickWord(this.usedWords, 'easy'); // rescues are merciful
-    this.usedWords.add(word);
-    t.revives[from] = { target: target.id, word, rows: [] };
-    this.pauseHungerForRevive();
-    this.net.emit(EV.SCORES, { scores: this.scoreMap(), buyer: from, item: 'revive' });
-    this.net.emit(EV.TOWER_REVIVE, { phase: 'start', reviver: from, target: target.id, paused: true });
+    const dig = target && t.buried[target.id];
+    if (!target || !dig || !target.connected) return fail('Pick a buried teammate');
+    if (p.score < SHOP.rope.price) return fail(`Need ${SHOP.rope.price} points`);
+    p.score -= SHOP.rope.price;
+    this.net.emit(EV.SCORES, { scores: this.scoreMap(), buyer: from, item: 'rope' });
+    this.clearDig(target.id, null, from);
   }
 
-  onReviveGuess(word, from) {
+  // One dig word cleared, by the buried player's own typing or by a rope.
+  clearDig(pid, word, by = null) {
     const t = this.tower;
-    const rev = t.revives[from];
-    if (!rev) return;
-    if (!isValidGuess(word)) {
-      this.net.emit(EV.BAD_GUESS, { to: from, reason: 'invalid' });
+    const dig = t.buried[pid];
+    if (!dig) return;
+    dig.cleared += 1;
+    if (word) dig.words.push(word);
+    if (dig.cleared < TOWER.digWords) {
+      this.net.emit(EV.DIG, {
+        phase: 'clear', pid, cleared: dig.cleared, need: TOWER.digWords, word, by,
+      });
       return;
     }
-    const colors = scoreGuess(word, rev.word);
-    const solved = word === rev.word;
-    rev.rows.push({ word, colors });
-    // co-op spectacle: everyone watches the rescue, letters included
-    this.net.emit(EV.TOWER_REVIVE, {
-      phase: 'row', reviver: from, target: rev.target,
-      row: rev.rows.length - 1, word, colors,
+    delete t.buried[pid];
+    t.lives[pid] = TOWER.digReturnLives;
+    this.net.emit(EV.DIG, {
+      phase: 'out', pid, cleared: dig.cleared, need: TOWER.digWords, by,
+      lives: { ...t.lives },
     });
-    if (solved || rev.rows.length >= MAX_ROWS) {
-      delete t.revives[from];
-      if (solved) t.lives[rev.target] = TOWER.reviveLives;
-      const resumed = this.resumeHungerIfIdle();
-      this.net.emit(EV.TOWER_REVIVE, {
-        phase: 'end', reviver: from, target: rev.target, ok: solved,
-        lives: { ...t.lives }, secret: rev.word, resumed, hungerMs: t.hungerMs,
+  }
+
+  // Buried input. Same verb as the rest of the game - a real word under the
+  // live decree - but it moves rubble instead of stone: no score, no height,
+  // no combo, and a failed attempt costs nothing (you are already at zero).
+  onDigGuess(word, from) {
+    const t = this.tower;
+    const dig = t.buried[from];
+    if (!dig) return;
+    const bad = !isValidGuess(word) ? 'not a word'
+      : dig.words.includes(word) ? 'already dug with that'
+        : this.towerOnScreen(word) ? 'already in the tower'
+          : !matchesConstraint(word, t.constraint) ? 'breaks the decree' : null;
+    if (bad) {
+      this.net.emit(EV.DIG, {
+        phase: 'clear', pid: from, cleared: dig.cleared, need: TOWER.digWords,
+        word, rejected: bad,
       });
+      return;
     }
+    this.clearDig(from, word);
   }
 
   endTower() {
@@ -388,7 +396,6 @@ export class Engine {
     this.started = false;
     this.over = false;
     this.tower = null;
-    this.usedWords = new Set(this.usedWords); // used words persist across a session
     for (const p of this.players) { p.score = 0; p.alive = true; p.spectator = false; }
     this.players = this.players.filter((p) => p.connected);
     this.broadcastLobby();
@@ -400,8 +407,8 @@ export class Engine {
     const p = this.player(from);
     const fail = (reason) => this.net.emit(EV.SHOP_ERR, { to: from, reason });
     if (!item || !p) return;
-    if (d.item !== 'revive') return fail('The tower sells only revival');
-    return this.onReviveBuy(d, from, fail);
+    if (d.item !== 'rope') return fail('The tower sells only rope');
+    return this.onRopeBuy(d, from, fail);
   }
 
   // Guess words travel lightly obfuscated so rival guesses aren't casual
@@ -448,20 +455,11 @@ export class Engine {
 
     this.net.emit(EV.PLAYER_LEFT, { pid, why });
 
-    // A leaver's revive fizzles (points stay spent, teammate stays down) - the
-    // hunger clock resumes if that was the last active revive. The run ends if
-    // only downed players remain.
+    // A leaver's half-finished dig goes with them. The run ends if nobody is
+    // left standing.
     if (this.tower) {
-      const rev = this.tower.revives[pid];
-      if (rev) {
-        delete this.tower.revives[pid];
-        const resumed = this.resumeHungerIfIdle();
-        this.net.emit(EV.TOWER_REVIVE, {
-          phase: 'end', reviver: pid, target: rev.target, ok: false, secret: rev.word,
-          lives: { ...this.tower.lives }, resumed, hungerMs: this.tower.hungerMs, reason: 'left',
-        });
-      }
-      if (this.activePlayers().length === 0 || this.everyoneDowned()) { this.endTower(); return; }
+      delete this.tower.buried[pid];
+      if (this.activePlayers().length === 0 || this.everyoneBuried()) { this.endTower(); return; }
     }
 
     const remaining = this.players.filter((q) => q.connected);
@@ -483,12 +481,10 @@ export class Engine {
         stage: this.tower.stage, constraint: this.tower.constraint,
         height: this.tower.height, combo: this.tower.combo,
         hungerMs: this.tower.hungerMs, lives: { ...this.tower.lives },
-        hungerPaused: !!this.tower.hungerPaused,
         rows: this.tower.rows.slice(-40),
-        reviving: Object.entries(this.tower.revives).map(([rev, s]) => ({
-          reviver: rev, target: s.target,
-          rows: s.rows.map((x) => ({ word: x.word, colors: x.colors })),
-        })),
+        digNeed: TOWER.digWords,
+        buried: Object.fromEntries(Object.entries(this.tower.buried)
+          .map(([pid, d]) => [pid, { cleared: d.cleared }])),
       } : null,
     };
     this.net.emit(EV.RESYNC, { to: pid, snapshot });

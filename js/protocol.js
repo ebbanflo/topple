@@ -11,7 +11,7 @@ export const EVENT_NAME = 'game';
 // ---- intents: player -> host -------------------------------------------
 export const IN = {
   JOIN: 'join',         // {name}
-  GUESS: 'guess',       // {x: obfuscated word}  (tower word, or a revive row)
+  GUESS: 'guess',       // {x: obfuscated word}  (a tower word, or a dig word)
   BUY: 'buy',           // {item, target?}
   QUIT: 'quit',         // {} (sender leaves; host handles + mirrors)
   RESYNC: 'resyncreq',  // {} ask host for a full snapshot
@@ -22,14 +22,13 @@ export const EV = {
   LOBBY: 'lobby',        // {players, settings, hostId, started}
   JOIN_ERR: 'joinerr',   // {to, reason}
   START: 'start',        // {settings, players}
-  BAD_GUESS: 'badguess', // {to, reason}
   SCORES: 'scores',      // {scores, buyer?, item?}
   SHOP_ERR: 'shoperr',   // {to, reason}
   TOWER: 'twr',          // {stage, constraint, height, hungerMs, lives, scores, combo}
   TOWER_WORD: 'twrword', // {pid, word, points, height, combo, stage}
   TOWER_MISS: 'twrmiss', // {pid, word, reason, lives, combo}
   TOWER_HUNGER: 'twrhunger', // {lives, downed}
-  TOWER_REVIVE: 'twrrev',    // {phase:'start'|'row'|'end', reviver, target, row?, word?, colors?, ok?, lives?, secret?, paused?, resumed?, hungerMs?, reason?}
+  DIG: 'dig',            // {phase:'buried'|'clear'|'out', pid, cleared, need, word?, by?, lives?}
   TOWER_BONUS: 'twrbonus',   // {reason:'milestone'|'spelled', lives, height} - team-wide heart
   PLAYER_LEFT: 'left',   // {pid}
   GAME_OVER: 'gameover', // {standings, winner, reason, height, stage}

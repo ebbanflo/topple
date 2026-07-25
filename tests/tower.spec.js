@@ -116,7 +116,7 @@ test.describe('topple', () => {
     await expect(host.locator('#over-title')).toContainText('HEIGHT 2');
   });
 
-  test('co-op: downed teammate, revive wordle, hunger bleeds everyone', async ({ context }) => {
+  test('co-op: a buried teammate digs themselves out, and hunger bleeds everyone', async ({ context }) => {
     test.setTimeout(90000);
     const host = await openPage(context);
     const code = await hostGame(host, 'CLERIC', { ...FAST, rampWords: 50, hungerMs: 600000 });
@@ -128,66 +128,63 @@ test.describe('topple', () => {
     await startGame(host, [host, pA]);
     await waitTower(host);
     await waitTower(pA);
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
-    // A flames out: three bad words
+    // A flames out: three bad words -> buried, NOT out
     await miss(pA, 'zzzzz');
     await miss(pA, 'qqqqq');
     await miss(pA, 'jjjjj');
-    await pA.waitForFunction(() => window.__topple.state().inputLocked, null, { polling: 100 });
-    await expect(host.locator(`[data-testid="lives-${aId}"]`)).toHaveText('—');
-    expect(await pA.evaluate(() => window.__topple.guess('crane'))).toBe(false);
+    await pA.waitForFunction(() => !!window.__topple.state().tower.buried[window.__topple.selfId],
+      null, { polling: 100 });
+    await expect(host.locator(`[data-testid="lives-${aId}"]`)).toHaveText('0/3');
+    // a buried player is still a player: input stays live
+    expect(await pA.evaluate(() => window.__topple.state().inputLocked)).toBe(false);
+    // ...and the run is NOT over, because someone is still standing
+    expect((await state(pA)).over).toBe(false);
 
-    // host keeps climbing (solo now), then buys a revive through the UI
-    let t = await towerState(host);
-    const [w1] = findWords(t.constraint, [], 1);
-    await climb(host, w1);
-    await setScore(host, hostId, 50000);
-    await host.click('[data-testid="shop-revive"]');
-    await host.click(`[data-testid="pick-${aId}"]`);
-    await host.click('#btn-picker-go');
-    await host.waitForFunction(() => !!window.__topple.state().tower.revives[window.__topple.selfId], null, { polling: 100 });
-    expect((await state(host)).players.find((p) => p.id === hostId).score).toBe(45000);
+    // the host climbs while A digs - both are playing at once
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 10);
+    await climb(host, words[0]);
+    const scoreBefore = (await state(pA)).players.find((p) => p.id === aId).score;
+    const heightBefore = (await towerState(pA)).height;
 
-    // the rescue wordle: one wrong guess (visible to the fallen teammate), then the solve
-    const secret = await host.evaluate((pid) => window.__topple.reviveSecret(pid), hostId);
-    expect(secret).toMatch(/^[a-z]{5}$/);
-    const wrong = ['crane', 'slimy', 'pouty'].find((w) => w !== secret);
-    await host.evaluate((w) => window.__topple.guess(w), wrong);
-    await pA.waitForFunction((h) => {
-      const rev = window.__topple.state().tower.revives[h];
-      return rev && rev.rows.length === 1;
-    }, hostId, { polling: 100 });
-    await expect(pA.locator('[data-testid="rev-0-0"]')).toHaveText(wrong[0].toUpperCase());
-    await host.evaluate((w) => window.__topple.guess(w), secret);
-    await pA.waitForFunction((a) => window.__topple.state().tower.lives[a] === 2, aId, { polling: 100 });
-    await pA.waitForFunction(() => !window.__topple.state().inputLocked, null, { polling: 100 });
+    // three decree-obeying words dig A out with exactly one life
+    for (let i = 1; i <= 3; i++) {
+      await pA.evaluate((w) => window.__topple.guess(w), words[i]);
+      await pA.waitForFunction((n) => {
+        const t = window.__topple.state().tower;
+        const d = t.buried[window.__topple.selfId];
+        return d ? d.cleared === n : n === 3;
+      }, i, { polling: 50 });
+    }
+    await pA.waitForFunction(() => window.__topple.state().tower.lives[window.__topple.selfId] === 1,
+      null, { polling: 100 });
+    expect((await towerState(pA)).buried[aId]).toBeUndefined();
+    // digging is not building: no floors, no points
+    expect((await towerState(pA)).height).toBe(heightBefore);
+    expect((await state(pA)).players.find((p) => p.id === aId).score).toBe(scoreBefore);
 
-    // the revived player can climb again
-    t = await towerState(pA);
-    const [w2] = findWords(t.constraint, await usedWords(pA), 1);
-    await climb(pA, w2);
+    // the dug-out player climbs for real again
+    await climb(pA, words[4]);
+    expect((await towerState(pA)).height).toBe(heightBefore + 1);
 
     // hunger: silence bleeds every living player
     await host.evaluate(() => { window.__topple.engine.tower.hungerMs = 900; });
-    t = await towerState(host);
-    const [w3] = findWords(t.constraint, await usedWords(host), 1);
-    await climb(host, w3); // re-arms the hunger clock at 900ms
+    await climb(host, words[5]); // re-arms the hunger clock at 900ms
     await host.waitForFunction(([h, a]) => {
       const lv = window.__topple.state().tower.lives;
-      return lv[h] === 2 && lv[a] === 1;
+      return lv[h] === 2 && lv[a] === 0;
     }, [hostId, aId], { polling: 100 });
 
-    // everyone falls -> game over with the final height
+    // everyone buried at once -> the tower falls
+    await host.evaluate(() => { window.__topple.engine.tower.hungerMs = 600000; });
     await miss(host, 'zzzzz');
-    await miss(host, 'qqqqq'); // host down
-    await miss(pA, 'zzzzz');   // A down -> all down
-    await pA.waitForFunction(() => window.__topple.state().over, null, { polling: 100 });
-    const over = (await state(pA)).gameover;
-    expect(over.reason).toBe('the tower fell');
-    expect(over.height).toBe(3);
+    await miss(host, 'qqqqq');
+    await host.waitForFunction(() => window.__topple.state().over, null, { polling: 100 });
+    expect((await state(host)).gameover.reason).toBe('the tower fell');
   });
 
-  test('bonus hearts: every 10th floor revives a downed teammate; capped at max', async ({ context }) => {
+  test('bonus hearts: every 10th floor lifts a buried teammate out; capped at max', async ({ context }) => {
     test.setTimeout(120000);
     const host = await openPage(context);
     const code = await hostGame(host, 'PRIEST', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -206,7 +203,8 @@ test.describe('topple', () => {
     await miss(pA, 'zzzzz');
     await miss(pA, 'qqqqq');
     await miss(pA, 'jjjjj');
-    await pA.waitForFunction(() => window.__topple.state().inputLocked, null, { polling: 100 });
+    await pA.waitForFunction(() => !!window.__topple.state().tower.buried[window.__topple.selfId],
+      null, { polling: 100 });
     expect((await towerState(host)).lives[aId]).toBe(0);
 
     // host climbs 10 distinct words alone -> height-10 milestone fires
@@ -222,14 +220,13 @@ test.describe('topple', () => {
     expect(placed).toBe(10);
 
     await host.waitForFunction(() => window.__topple.state().tower.height === 10, null, { polling: 100 });
-    // the milestone revived the downed teammate...
+    // the milestone lifted the buried teammate out...
     await pA.waitForFunction((id) => window.__topple.state().tower.lives[id] === 1, aId, { polling: 100 });
-    await pA.waitForFunction(() => !window.__topple.state().inputLocked, null, { polling: 100 });
     // ...and the host (who never lost a life) gained one too, capped by maxLives
     const hostId = await host.evaluate(() => window.__topple.selfId);
     let t = await towerState(host);
     expect(t.lives[hostId]).toBe(4); // 3 start + 1 milestone
-    expect(t.lives[aId]).toBe(1);    // 0 -> revived to 1
+    expect(t.lives[aId]).toBe(1);    // 0 -> lifted out to 1
 
     // grind to height 50 (5 milestones) to prove the cap holds
     const usedSoFar = new Set(await usedWords(host));
@@ -278,58 +275,74 @@ test.describe('topple', () => {
     await expect(host.locator('#toast')).toContainText('T-O-W-E-R');
   });
 
-  test('revive pauses the shared hunger clock; a bystander can keep climbing; resumes fresh after', async ({ context }) => {
+  test('rope: a standing teammate buys away one of a buried player\'s dig words', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
-    const code = await hostGame(host, 'MONK', { ...FAST, rampWords: 999, hungerMs: 900 });
-    const pA = await openPage(context); // will go down, gets revived
+    const code = await hostGame(host, 'MONK', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    const pA = await openPage(context); // will be buried
     await joinGame(pA, code, 'CASTER');
-    const pB = await openPage(context); // bystander: neither reviving nor downed
-    await joinGame(pB, code, 'ROGUE');
-    await host.waitForFunction(() => window.__topple.state().players.length === 3);
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
     const hostId = await host.evaluate(() => window.__topple.selfId);
     const aId = await pA.evaluate(() => window.__topple.selfId);
-    await startGame(host, [host, pA, pB]);
-    await waitTower(host); await waitTower(pA); await waitTower(pB);
+    await startGame(host, [host, pA]);
+    await waitTower(host); await waitTower(pA);
     await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
-    // A goes down; host and B stay up
-    await miss(pA, 'zzzzz');
-    await miss(pA, 'qqqqq');
-    await miss(pA, 'jjjjj');
-    await pA.waitForFunction(() => window.__topple.state().inputLocked, null, { polling: 100 });
+    await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); await miss(pA, 'jjjjj');
+    await pA.waitForFunction(() => !!window.__topple.state().tower.buried[window.__topple.selfId],
+      null, { polling: 100 });
 
+    // the shop only unlocks once somebody is actually buried and you can afford it
     await setScore(host, hostId, 50000);
-    await host.click('[data-testid="shop-revive"]');
+    await host.waitForFunction(() => !document.querySelector('[data-testid="shop-rope"]').disabled,
+      null, { polling: 100 });
+    await host.click('[data-testid="shop-rope"]');
     await host.click(`[data-testid="pick-${aId}"]`);
     await host.click('#btn-picker-go');
-    await host.waitForFunction(() => !!window.__topple.state().tower.revives[window.__topple.selfId], null, { polling: 100 });
-    expect((await towerState(host)).hungerPaused).toBe(true);
-    await expect(host.locator('#hunger-label')).toBeVisible();
-    await pB.waitForFunction(() => window.__topple.state().tower.hungerPaused, null, { polling: 100 });
 
-    // sit well past hungerMs (900ms) WITHOUT finishing the revive - nobody bleeds
-    const livesBefore = (await towerState(host)).lives;
-    await host.waitForTimeout(1800);
-    expect((await towerState(host)).lives).toEqual(livesBefore);
+    // one marker cleared, and the buyer paid for it
+    await pA.waitForFunction(() => window.__topple.state().tower.buried[window.__topple.selfId]?.cleared === 1,
+      null, { polling: 100 });
+    expect((await state(host)).players.find((p) => p.id === hostId).score).toBe(48000);
 
-    // a completely uninvolved bystander can still climb normally mid-pause
-    const bystanderWord = GUESSES.find((w) => /^[a-z]{5}$/.test(w) && !w.startsWith('a'));
-    await climb(pB, bystanderWord);
-    expect((await towerState(pB)).height).toBe(1);
+    // A finishes the last two themselves and is back with one life
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 4);
+    for (const w of words.slice(0, 2)) {
+      await pA.evaluate((x) => window.__topple.guess(x), w);
+      await pA.waitForTimeout(120);
+    }
+    await pA.waitForFunction(() => window.__topple.state().tower.lives[window.__topple.selfId] === 1,
+      null, { polling: 100 });
+  });
 
-    // now solve the revive
-    const secret = await host.evaluate((pid) => window.__topple.reviveSecret(pid), hostId);
-    await host.evaluate((w) => window.__topple.guess(w), secret);
-    await pA.waitForFunction((id) => window.__topple.state().tower.lives[id] === 2, aId, { polling: 100 });
-    await host.waitForFunction(() => !window.__topple.state().tower.hungerPaused, null, { polling: 100 });
-    await expect(host.locator('#hunger-label')).toBeHidden();
+  test('a bonus heart lifts a buried player straight out', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    const code = await hostGame(host, 'PRIEST', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    const pA = await openPage(context);
+    await joinGame(pA, code, 'BURIED');
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
+    const aId = await pA.evaluate(() => window.__topple.selfId);
+    await startGame(host, [host, pA]);
+    await waitTower(host); await waitTower(pA);
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
-    // the clock resumed fresh: waiting past hungerMs again now DOES bleed
-    await host.waitForFunction(([h, a, b]) => {
-      const lv = window.__topple.state().tower.lives;
-      return lv[h] < 3 || lv[a] < 2 || lv[b] < 3;
-    }, [hostId, aId, await pB.evaluate(() => window.__topple.selfId)], { polling: 100, timeout: 15000 });
+    await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); await miss(pA, 'jjjjj');
+    await pA.waitForFunction(() => !!window.__topple.state().tower.buried[window.__topple.selfId],
+      null, { polling: 100 });
+
+    // host climbs to the 10-floor milestone; the team heart un-buries A for free
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 12);
+    let placed = 0;
+    for (const w of words) {
+      if (placed >= 10) break;
+      const used = new Set(await usedWords(host));
+      if (used.has(w)) continue;
+      await climb(host, w);
+      placed += 1;
+    }
+    await pA.waitForFunction((id) => window.__topple.state().tower.lives[id] === 1, aId, { polling: 100 });
+    expect((await towerState(pA)).buried[aId]).toBeUndefined();
   });
 
   test('lobby LEVEL + DECREE: four levels (no STD), 3/5/10 words per decree, live-sync and real pacing', async ({ context }) => {
@@ -605,16 +618,15 @@ test.describe('topple', () => {
     expect((await towerState(host)).height).toBe(1);
   });
 
-  test('revive replaces the tower (fixed height, keyboard never moves) and bystanders keep climbing', async ({ context }) => {
+  test('the tower stays on screen while a teammate is buried, and the keyboard never moves', async ({ context }) => {
     test.setTimeout(60000);
-    const host = await openPage(context); // will be the reviver
+    const host = await openPage(context);
     const code = await hostGame(host, 'MEDIC', { ...FAST, rampWords: 999, hungerMs: 600000 });
-    const pA = await openPage(context); // will be downed / revived
+    const pA = await openPage(context); // will be buried
     await joinGame(pA, code, 'FALLEN');
     const pB = await openPage(context); // bystander: keeps climbing throughout
     await joinGame(pB, code, 'ROGUE');
     await host.waitForFunction(() => window.__topple.state().players.length === 3);
-    const hostId = await host.evaluate(() => window.__topple.selfId);
     const aId = await pA.evaluate(() => window.__topple.selfId);
     await startGame(host, [host, pA, pB]);
     await Promise.all([host, pA, pB].map(waitTower));
@@ -622,52 +634,28 @@ test.describe('topple', () => {
 
     const keyboardY = (page) => page.locator('#keyboard').evaluate((el) => el.offsetTop);
     const yBefore = await keyboardY(host);
-    await expect(host.locator('#tower-scene')).toBeVisible();
-    await expect(host.locator('#revive-box')).toBeHidden();
 
-    // A goes down
     await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); await miss(pA, 'jjjjj');
-    await pA.waitForFunction(() => window.__topple.state().inputLocked, null, { polling: 100 });
+    await Promise.all([host, pA, pB].map((p) => p.waitForFunction((id) =>
+      !!window.__topple.state().tower.buried[id], aId, { polling: 100 })));
 
-    await setScore(host, hostId, 50000);
-    await host.click('[data-testid="shop-revive"]');
-    await host.click(`[data-testid="pick-${aId}"]`);
-    await host.click('#btn-picker-go');
-    await host.waitForFunction(() => !!window.__topple.state().tower.revives[window.__topple.selfId], null, { polling: 100 });
-    await pA.waitForFunction(() => Object.keys(window.__topple.state().tower.revives).length > 0, null, { polling: 100 });
-    await pB.waitForFunction(() => Object.keys(window.__topple.state().tower.revives).length > 0, null, { polling: 100 });
-
-    // the swap: tower hidden, rescue grid visible, on EVERY screen
+    // burial swaps nothing out: the tower is never replaced by another panel,
+    // and the status line only changes visibility, never height
     for (const page of [host, pA, pB]) {
-      await expect(page.locator('#tower-scene')).toBeHidden();
-      await expect(page.locator('#revive-box')).toBeVisible();
+      await expect(page.locator('#tower-scene')).toBeVisible();
+      await expect(page.locator('#tower-input')).toBeVisible();
     }
-    // #tower-input itself is NEVER hidden - hiding it would shrink the column
-    // and shift the keyboard. The reviver's copy just renders blank; the
-    // bystander's stays fully visible AND usable.
-    await expect(host.locator('#tower-input')).toBeVisible();
-    await expect(host.locator('[data-testid="twr-in-0"]')).toHaveText('');
-    await expect(pB.locator('#tower-input')).toBeVisible();
-
-    // the keyboard has not moved a single pixel despite the swap
+    await expect(host.locator('#status-line')).toBeVisible();
     expect(await keyboardY(host)).toBe(yBefore);
 
-    // the bystander can still climb the (hidden) tower normally mid-revive
+    // everyone still standing keeps climbing normally
     const t = await towerState(pB);
     const [wB] = findWords(t.constraint, [], 1);
     await climb(pB, wB);
     expect((await towerState(pB)).height).toBe(1);
 
-    // solve the revive - the tower comes back for everyone, keyboard still stable
-    const secret = await host.evaluate((pid) => window.__topple.reviveSecret(pid), hostId);
-    await host.evaluate((w) => window.__topple.guess(w), secret);
-    await pA.waitForFunction((id) => window.__topple.state().tower.lives[id] === 2, aId, { polling: 100 });
-
-    for (const page of [host, pA, pB]) {
-      await expect(page.locator('#tower-scene')).toBeVisible();
-      await expect(page.locator('#revive-box')).toBeHidden();
-    }
-    await expect(host.locator('#tower-input')).toBeVisible();
-    expect(await keyboardY(host)).toBe(yBefore);
+    // and the buried player's own screen is unshifted too
+    expect(await keyboardY(pA)).toBe(await keyboardY(pB));
   });
+
 });

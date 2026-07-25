@@ -136,8 +136,7 @@ window.addEventListener('pagehide', () => {
 // ---------- debug handle for the E2E suite (?debug=1) ----------
 function installDebug() {
   if (!DEBUG) return;
-  // record every envelope crossing this page (tests assert the rescue secret
-  // stays off the wire until that rescue ends)
+  // record every envelope crossing this page
   window.__wireLog = [];
   S.net.onAny((env) => window.__wireLog.push(JSON.stringify(env)));
   window.__topple = {
@@ -150,8 +149,6 @@ function installDebug() {
     // engine-side helpers (host page only)
     setScore: (pid, n) => S.engine && S.engine._debugSetScore(pid, n),
     setSettings: (patch) => S.engine && S.engine.setSettings(patch),
-    reviveSecret: (pid) => (S.engine && S.engine.tower && S.engine.tower.revives[pid]
-      ? S.engine.tower.revives[pid].word : null),
     engineState: () => S.engine && {
       started: S.engine.started,
       over: S.engine.over,
@@ -161,12 +158,11 @@ function installDebug() {
         lives: { ...S.engine.tower.lives }, used: S.engine.tower.used.size,
         rampWords: S.engine.tower.rampWords, hungerMs: S.engine.tower.hungerMs,
         difficulty: S.engine.tower.difficulty,
-        hungerPaused: !!S.engine.tower.hungerPaused,
-        revives: Object.keys(S.engine.tower.revives),
+        buried: Object.fromEntries(Object.entries(S.engine.tower.buried)
+          .map(([pid, d]) => [pid, { cleared: d.cleared, words: [...d.words] }])),
         rows: S.engine.tower.rows.map((r) => ({ ...r })),
       },
       players: S.engine.players.map((p) => ({ ...p })),
-      usedWords: S.engine.usedWords.size,
     },
     // client-side helpers (any page)
     state: () => ({
@@ -180,15 +176,13 @@ function installDebug() {
         stage: S.mirror.tower.stage, height: S.mirror.tower.height,
         combo: S.mirror.tower.combo, constraint: S.mirror.tower.constraint,
         lives: { ...S.mirror.tower.lives },
-        hungerPaused: !!S.mirror.tower.hungerPaused,
+        digNeed: S.mirror.digNeed(),
         rows: S.mirror.tower.rows.map((r) => ({ ...r })),
-        revives: Object.fromEntries(Object.entries(S.mirror.tower.revives).map(([k, v]) => [
-          k, { target: v.target, rows: v.rows.map((x) => ({ ...x })) },
-        ])),
+        buried: Object.fromEntries(Object.entries(S.mirror.tower.buried)
+          .map(([k, v]) => [k, { cleared: v.cleared }])),
       },
       gameover: S.mirror.gameover && { ...S.mirror.gameover },
       input: S.mirror.input,
-      keyboard: S.mirror.keyboardState(),
       inputLocked: S.mirror.inputLocked(),
       roomDead: S.mirror.roomDead,
       joinError: S.mirror.joinError,
