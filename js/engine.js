@@ -103,6 +103,9 @@ export class Engine {
   setSettings(patch) {
     if (this.started) return;
     Object.assign(this.settings, patch);
+    // Defence against a stale client naming a mode this build doesn't know.
+    // Note it fails SILENTLY, which is how a UI bug that sent NaN here went
+    // unnoticed for a whole phase - the lobby click path is tested now.
     if (!MODE_CHOICES.includes(this.settings.mode)) this.settings.mode = 'classic';
     // A shared daily is only comparable if everyone plays the same knobs, so
     // DAILY overrides them rather than trusting each host to match.

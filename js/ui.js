@@ -145,7 +145,15 @@ export class UI {
         const btn = e.target.closest('.seg-btn');
         if (!btn || !this.mirror || !this.mirror.isHost()) return;
         const key = seg.dataset.setting;
-        const val = key === 'difficulty' ? btn.dataset.val : Number(btn.dataset.val);
+        // Infer the type from the value rather than from a list of keys. The
+        // list version rotted: it named `difficulty` as the one string setting,
+        // so when MODE arrived it got Number('ascent') = NaN, the engine's
+        // MODE_CHOICES guard quietly reset it to 'classic', and ASCENT/DAILY
+        // were unreachable through the UI. Inferring can't rot when the next
+        // string-valued setting is added.
+        const raw = btn.dataset.val;
+        const n = Number(raw);
+        const val = raw !== '' && Number.isFinite(n) ? n : raw;
         this.a.setSettings({ [key]: val });
         sfx.key();
       });

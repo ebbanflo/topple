@@ -466,6 +466,64 @@ test.describe('topple', () => {
     await expect(host.locator('#ovl-draft')).toBeHidden();
   });
 
+  test('lobby: every settings button actually lands its value, with the right TYPE', async ({ context }) => {
+    // The lobby click path had no coverage at all: every other test reaches
+    // ASCENT/DAILY through window.__topple.setSettings(), which bypasses the
+    // UI's value coercion entirely. That is how a whole phase shipped on top of
+    // a mode nobody could select - Number('ascent') is NaN, the engine's
+    // MODE_CHOICES guard quietly reset it to 'classic', and the button looked
+    // dead. This test drives the real DOM.
+    const host = await openPage(context);
+    await hostGame(host, 'CLICKER');
+    const setting = async () => (await state(host)).settings;
+
+    // ---- string-valued rows must arrive as strings ----
+    for (const mode of ['ascent', 'daily', 'classic']) {
+      await host.click(`[data-setting="mode"] [data-val="${mode}"]`);
+      await host.waitForFunction((m) => window.__topple.state().settings.mode === m,
+        mode, { polling: 50 });
+      expect((await setting()).mode).toBe(mode);
+      // the highlight must agree with the state, so they can never disagree silently
+      await expect(host.locator(`[data-setting="mode"] [data-val="${mode}"]`))
+        .toHaveClass(/\bon\b/);
+    }
+
+    await host.click('[data-setting="difficulty"] [data-val="hard"]');
+    await host.waitForFunction(() => window.__topple.state().settings.difficulty === 'hard',
+      null, { polling: 50 });
+    expect((await setting()).difficulty).toBe('hard');
+
+    // ---- numeric rows must still arrive as NUMBERS ----
+    // this is what pins the coercion in both directions: a fix that made
+    // everything a string would pass the assertions above and fail here
+    await host.click('[data-setting="rampWords"] [data-val="3"]');
+    await host.waitForFunction(() => window.__topple.state().settings.rampWords === 3,
+      null, { polling: 50 });
+    const s = await setting();
+    expect(s.rampWords).toBe(3);
+    expect(typeof s.rampWords).toBe('number');
+  });
+
+  test('lobby: picking DAILY by hand locks the other rows, and CLASSIC frees them', async ({ context }) => {
+    const host = await openPage(context);
+    await hostGame(host, 'DIALLER');
+
+    await host.click('[data-setting="mode"] [data-val="daily"]');
+    await host.waitForFunction(() => window.__topple.state().settings.mode === 'daily',
+      null, { polling: 50 });
+    await expect(host.locator('[data-setting="difficulty"] [data-val="hard"]')).toBeDisabled();
+    await expect(host.locator('[data-setting="rampWords"] [data-val="3"]')).toBeDisabled();
+    await expect(host.locator('#mode-blurb')).toContainText('TOWER #');
+    // the MODE row itself must stay live, or DAILY would be a one-way door
+    await expect(host.locator('[data-setting="mode"] [data-val="classic"]')).toBeEnabled();
+
+    await host.click('[data-setting="mode"] [data-val="classic"]');
+    await host.waitForFunction(() => window.__topple.state().settings.mode === 'classic',
+      null, { polling: 50 });
+    await expect(host.locator('[data-setting="difficulty"] [data-val="hard"]')).toBeEnabled();
+    await expect(host.locator('[data-setting="rampWords"] [data-val="3"]')).toBeEnabled();
+  });
+
   test('DAILY: two independent rooms get the same tower, and the knobs are locked', async ({ context }) => {
     test.setTimeout(60000);
     // Two entirely separate rooms, hosted by different players, on the same day.
@@ -529,7 +587,11 @@ test.describe('topple', () => {
     test.setTimeout(90000);
     const host = await openPage(context);
     const code = await hostGame(host, 'FOREMAN', { ...FAST, rampWords: 999, hungerMs: 600000 });
-    await host.evaluate(() => window.__topple.setSettings({ mode: 'ascent' }));
+    // reached by clicking, not through the debug handle, so at least one full
+    // ASCENT run is driven the way a player drives it
+    await host.click('[data-setting="mode"] [data-val="ascent"]');
+    await host.waitForFunction(() => window.__topple.state().settings.mode === 'ascent',
+      null, { polling: 50 });
     const guest = await openPage(context);
     await joinGame(guest, code, 'HOD');
     await host.waitForFunction(() => window.__topple.state().players.length === 2);
