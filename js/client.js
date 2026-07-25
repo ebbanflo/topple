@@ -35,10 +35,18 @@ export class Mirror {
       [EV.JOIN_ERR]: (d) => { if (d.to === selfId) { this.joinError = d.reason; this.fire('joinerr', d); } },
       [EV.START]: (d) => this.onStart(d),
       [EV.SCORES]: (d) => this.onScores(d),
-      [EV.SHOP_ERR]: (d) => { if (d.to === selfId) { this.showToast(d.reason); this.fire('shoperr', d); } },
+      [EV.SHOP_ERR]: (d) => {
+        if (d.to !== selfId) return;
+        // a refusal IS an answer: without this the sender stays input-locked
+        // for the full pending window after, say, speaking out of turn
+        this.pendingTower = 0;
+        this.showToast(d.reason);
+        this.fire('shoperr', d);
+      },
       [EV.DECREE_OFFER]: (d) => this.onDecreeOffer(d),
       [EV.INTERMISSION]: (d) => this.onIntermission(d),
       [EV.RELICS]: (d) => this.onRelics(d),
+      [EV.BOSS]: (d) => this.onBoss(d),
       [EV.TOWER]: (d) => this.onTower(d),
       [EV.TOWER_WORD]: (d) => this.onTowerWord(d),
       [EV.TOWER_MISS]: (d) => this.onTowerMiss(d),
@@ -146,6 +154,7 @@ export class Mirror {
     t.combo = d.combo;
     t.stage = d.stage;
     if (t.run && d.storeyScore != null) t.run.storeyScore = d.storeyScore;
+    if (t.run && d.voice !== undefined) t.run.voice = d.voice;
     t.hungerAt = now() + t.hungerMs;
     const p = this.player(d.pid);
     if (p) p.score += d.points; // lean protocol: deltas, not snapshots
@@ -218,6 +227,18 @@ export class Mirror {
     t.run.mortar = d.mortar;
     t.run.offers = d.offers || {};
     this.fire('relics', d);
+  }
+
+  onBoss(d) {
+    const t = this.tower;
+    if (t && t.run) { t.run.boss = d.id; }
+    this.boss = d;
+    this.fire('boss', d);
+  }
+
+  myVoice() {
+    const r = this.myRun();
+    return !r || !r.voice ? null : r.voice;
   }
 
   myRelics() { return (this.myRun()?.relics?.[this.selfId]) || []; }

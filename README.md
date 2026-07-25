@@ -21,6 +21,12 @@ hunger bar is the pressure, and you fail a storey by getting buried, not by
 running out of turns. Clear the eighth and the tower is **crowned** — the only
 way to actually win.
 
+Storeys **3, 6 and 8** bring a **boss decree** — a rule that warps the whole
+storey on top of whatever the team drafted. **THE CENSOR** forbids the letter E.
+**THE GLUTTON** halves the clock. **THE TWIN** demands every word share exactly
+two letters with the floor below. **THE TAX** builds cheap words anyway and takes
+a life for them. **THE SILENCE** hands the tower one voice at a time.
+
 At each intermission every player is dealt **three relics of their own**, bought
 from the team's shared **mortar** — so the room has to decide whose build is
 worth funding. Five each, for the whole run. Some are plain numbers; the
@@ -84,6 +90,7 @@ Host-authoritative, with a thin mirror on every client.
 | `js/decree.js` | Decree generation, matching and scoring. Pure functions over the dictionary — used by both the engine and the test suite. Takes its randomness as an argument, so it holds no RNG state. |
 | `js/rng.js` | mulberry32 plus a string hash. Same seed, same tower, on every device. |
 | `js/relics.js` | The relic catalogue: a declarative registry of pure functions over a context object, plus the rule-flag and dealing helpers. No engine imports, no state. |
+| `js/bosses.js` | Boss decrees. Same shape as relics — a registry plus constraint merging. |
 | `js/tower3d.js` | The tower renderer. Pure CSS 3D; deliberately swappable (`sync / push / miss / stress / bless / collapse / reset`). |
 | `js/ui.js` | Everything else on screen. Renders exclusively from the mirror. |
 | `js/words.js` | The dictionary gate, and nothing else. `data/solutions.js` is used only by `decree.js`, for the recognizability floor that keeps generated decrees humane. |
@@ -137,6 +144,19 @@ the formula, and the two disagreed by ten points at stage 3 combo 9, purely
 because floating-point multiplication is not associative. A test asserts parity
 across ~1,250 word/stage/combo combinations so that class of drift stays
 impossible rather than merely unlikely.
+
+### Why bosses aren't just decrees
+
+Two of them can't be. `matchesConstraint()` is a stateless predicate over a
+word, and it has to stay that way: `countRecognizable()` runs it across the
+entire answer bank to vet every generated decree, and the draft calls that on
+every deal. THE TWIN needs the floor below and THE SILENCE needs to know whose
+turn it is — both engine state, not word state. Teaching `matchesConstraint` a
+context argument to serve them would have quietly broken the thing that keeps
+generated decrees humane, so bosses got their own shape instead
+(`constraint` / `check` / `toll` / `solo` / `hungerMul`) and the engine ANDs
+them in. A boss's stateless half still merges into the drafted decree rather
+than replacing it.
 
 ### Tuning ASCENT
 

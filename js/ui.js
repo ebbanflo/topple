@@ -4,6 +4,7 @@
 import { WORD_LEN, SHOP, DEFAULT_SETTINGS, STORE } from './config.js';
 import { describeConstraint, countRecognizable } from './decree.js';
 import { RELICS, MAX_RELICS, REROLL_COST } from './relics.js';
+import { BOSSES } from './bosses.js';
 import { el, now } from './util.js';
 import { sfx, soundEnabled, setSound } from './audio.js';
 import { Tower3D } from './tower3d.js';
@@ -237,6 +238,7 @@ export class UI {
       case 'offer': this.showDraft(); break;
       case 'intermission': this.onIntermission(d); break;
       case 'relics': this.renderShop2(d); break;
+      case 'boss': this.onBoss(d); break;
       case 'tower':
         if (d.insured) { this.showToast('INSURANCE — the tower holds at one floor'); sfx.bless(); }
         this.onDecree(d);
@@ -345,12 +347,17 @@ export class UI {
       this.showToast(`STOREY ${d.storeyStart} — QUOTA ${compact(m.tower.run.quota)}`);
       sfx.stage();
     }
-    $('decree').textContent = describeConstraint(m.tower.constraint);
+    const boss = m.tower.run && m.tower.run.boss ? BOSSES[m.tower.run.boss] : null;
+    $('decree').textContent = boss
+      ? `${describeConstraint(m.tower.constraint)} · ${boss.short}`
+      : describeConstraint(m.tower.constraint);
+    $('decree').classList.toggle('boss', !!boss);
     $('decree').classList.remove('swap');
     void $('decree').offsetWidth;
     $('decree').classList.add('swap');
+    const bossNow = m.tower.run && m.tower.run.boss ? BOSSES[m.tower.run.boss] : null;
     $('hdr-slug').textContent = m.tower.run
-      ? `INT. THE TOWER — STOREY ${m.tower.run.storey} OF ${m.tower.run.storeys}`
+      ? `INT. THE TOWER — STOREY ${m.tower.run.storey}/${m.tower.run.storeys}${bossNow ? ` · ${bossNow.name}` : ''}`
       : m.daily
         ? `INT. THE TOWER #${m.daily.n} — STAGE ${m.tower.stage}`
         : `INT. THE TOWER — STAGE ${m.tower.stage}`;
@@ -420,6 +427,16 @@ export class UI {
       el$.classList.remove('inactive', 'buried');
       return;
     }
+    // THE SILENCE outranks the build readout - you need to know if it's you.
+    const run = m.myRun();
+    const voice = run && run.voice;
+    if (voice) {
+      const p = m.player(voice);
+      el$.textContent = voice === m.selfId ? 'THE SILENCE — YOUR VOICE' : `THE SILENCE — ${p?.name || '???'}`;
+      el$.classList.remove('inactive');
+      el$.classList.toggle('buried', voice === m.selfId);
+      return;
+    }
     // Otherwise the band shows your build. It is already reserved space, so
     // relics cost the layout nothing.
     const held = m.myRelics();
@@ -451,6 +468,7 @@ export class UI {
     this.renderTowerInput();
     this.renderStrip();
     this.renderShop();
+    this.renderStatusLine();
     this.spawnFloat(`+${d.points.toLocaleString('en-US')}`, d.pid);
     sfx.land(d.height);
     sfx.points();
@@ -529,15 +547,29 @@ export class UI {
     this.renderShop();
   }
 
+  onBoss(d) {
+    this.showToast(`${d.name} — ${d.desc}`, 4200);
+    sfx.hunger();
+    const dec = $('decree');
+    dec.classList.remove('boss');
+    void dec.offsetWidth;
+    dec.classList.add('boss');
+    this.renderTowerHud();
+  }
+
   // ---------- ASCENT intermission ----------
   onIntermission(d) {
     const m = this.mirror;
     this.closeDraft();
     this.show('scr-inter');
     $('inter-title').textContent = d.last ? 'THE TOWER STANDS' : `STOREY ${d.storey} CLEARED`;
+    // The engine promises only THAT a boss is coming, not which - naming it
+    // here would consume the pick early and spoil the reveal.
     $('inter-sub').textContent = d.last
       ? 'nothing left to build'
-      : `everyone takes a heart back — storey ${d.storey + 1} wants more`;
+      : d.nextBoss
+        ? `everyone takes a heart back — and something is waiting on storey ${d.storey + 1}`
+        : `everyone takes a heart back — storey ${d.storey + 1} wants more`;
     $('inter-score').textContent = d.storeyScore.toLocaleString('en-US');
     $('inter-quota').textContent = d.quota.toLocaleString('en-US');
     $('inter-mortar').textContent = d.mortar.toLocaleString('en-US');

@@ -290,6 +290,12 @@ input, button { font-family: inherit; color: inherit; }
   display: grid;
   place-items: center;
 }
+.decree.boss {
+  border-top-width: 4px;
+  border-bottom-width: 4px;
+  animation: boss-pulse 1.8s ease-in-out infinite;
+}
+@keyframes boss-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .62; } }
 .decree.swap { animation: decree-swap .42s cubic-bezier(.2, .9, .25, 1); }
 @keyframes decree-swap {
   0% { opacity: 0; transform: translateY(-8px); letter-spacing: .34em; }

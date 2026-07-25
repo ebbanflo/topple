@@ -31,6 +31,7 @@ export const EV = {
   DECREE_OFFER: 'offer', // {stage, options:[constraint], ms} pick one, first pick wins
   INTERMISSION: 'inter', // ASCENT: {storey, quota, storeyScore, mortar, earned, last, offers, relics}
   RELICS: 'relics',      // ASCENT: {relics:{pid:[id]}, mortar, offers:{pid:[id]}, bought?, by?}
+  BOSS: 'boss',          // ASCENT: {id, name, short, desc, storey} a storey-long rule
   TOWER: 'twr',          // {stage, constraint, height, hungerMs, lives, scores, combo, pickedBy?}
   TOWER_WORD: 'twrword', // {pid, word, points, height, combo, stage}
   TOWER_MISS: 'twrmiss', // {pid, word, reason, lives, combo}

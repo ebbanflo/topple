@@ -10,6 +10,7 @@ import {
   towerState, usedWords, waitTower, climb, miss,
 } from './helpers.js';
 import { RELICS } from '../js/relics.js';
+import { BOSSES } from '../js/bosses.js';
 
 const STYLE_CSS_PATH = fileURLToPath(new URL('../css/style.css', import.meta.url));
 
@@ -735,6 +736,115 @@ test.describe('topple', () => {
     await climb(host, words[0]); // same word, still on screen
     expect((await towerState(host)).height).toBe(h + 1);
     expect((await towerState(host)).lives[hostId]).toBe(lives0 - 1); // no penalty
+  });
+
+  test('boss storeys: THE CENSOR enforces on top of the drafted decree', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    await hostGame(host, 'CENSORED', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.evaluate(() => window.__topple.setSettings({ mode: 'ascent' }));
+    await host.click('#btn-start');
+    await waitTower(host);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
+
+    // pin the boss so the test isn't at the mercy of the deal
+    await host.evaluate(() => {
+      const e = window.__topple.engine;
+      e.tower.constraint = { req: ['t'] };
+      e.tower.run.boss = 'censor';
+      e.broadcastTower();
+    });
+    await host.waitForFunction(() => window.__topple.state().tower.run.boss === 'censor',
+      null, { polling: 50 });
+    await expect(host.locator('#decree')).toContainText('NO E');
+    await expect(host.locator('#decree')).toHaveClass(/boss/);
+    await expect(host.locator('#hdr-slug')).toContainText('THE CENSOR');
+
+    // a word obeying the DECREE but breaking the BOSS is refused, and says so
+    const decreeOnly = GUESSES.find((w) => w.includes('t') && w.includes('e'));
+    await miss(host, decreeOnly);
+    await expect(host.locator('#toast')).toContainText('THE CENSOR');
+
+    // a word obeying both stands
+    const both = GUESSES.find((w) => w.includes('t') && !w.includes('e'));
+    const lives = (await towerState(host)).lives[hostId];
+    await climb(host, both);
+    expect((await towerState(host)).lives[hostId]).toBe(lives);
+
+    // ...and the drafted decree is still live underneath
+    const bossOnly = GUESSES.find((w) => !w.includes('t') && !w.includes('e'));
+    await miss(host, bossOnly);
+  });
+
+  test('boss storeys: THE TAX builds the word and takes a life for it', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    await hostGame(host, 'TAXMAN', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.evaluate(() => window.__topple.setSettings({ mode: 'ascent' }));
+    await host.click('#btn-start');
+    await waitTower(host);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
+    await host.evaluate(() => {
+      const e = window.__topple.engine;
+      e.tower.constraint = {};
+      e.tower.run.boss = 'tax';
+      e.broadcastTower();
+    });
+
+    // a cheap word: it STILL becomes a floor, but it bleeds
+    const cheap = GUESSES.find((w) => BOSSES.tax.toll(w));
+    const lives0 = (await towerState(host)).lives[hostId];
+    const h0 = (await towerState(host)).height;
+    await climb(host, cheap);
+    await host.waitForFunction((n) => window.__topple.state().tower.lives[window.__topple.selfId] === n - 1,
+      lives0, { polling: 50 });
+    expect((await towerState(host)).height).toBe(h0 + 1); // built anyway
+
+    // an expensive word costs nothing
+    const dear = GUESSES.find((w) => !BOSSES.tax.toll(w) && w !== cheap);
+    const lives1 = (await towerState(host)).lives[hostId];
+    await climb(host, dear);
+    await host.waitForTimeout(200);
+    expect((await towerState(host)).lives[hostId]).toBe(lives1);
+  });
+
+  test('boss storeys: THE SILENCE refuses out-of-turn words without punishing them', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    const code = await hostGame(host, 'VOICE', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.evaluate(() => window.__topple.setSettings({ mode: 'ascent' }));
+    const guest = await openPage(context);
+    await joinGame(guest, code, 'ECHO');
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
+    const [hostId, guestId] = await host.evaluate(() =>
+      window.__topple.state().players.map((p) => p.id));
+    await startGame(host, [host, guest]);
+    await waitTower(host); await waitTower(guest);
+    await host.evaluate((id) => {
+      const e = window.__topple.engine;
+      e.tower.constraint = {};
+      e.tower.run.boss = 'silence';
+      e.tower.run.voice = id;
+      e.broadcastTower();
+    }, hostId);
+    await guest.waitForFunction(() => window.__topple.state().tower.run.voice, null, { polling: 50 });
+    await expect(guest.locator('#status-line')).toContainText('THE SILENCE');
+
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 4);
+    // the guest speaks out of turn: refused, but NOT a miss
+    const guestLives = (await towerState(guest)).lives[guestId];
+    const h0 = (await towerState(guest)).height;
+    await guest.evaluate((w) => window.__topple.guess(w), words[0]);
+    await guest.waitForTimeout(300);
+    expect((await towerState(guest)).height).toBe(h0);
+    expect((await towerState(guest)).lives[guestId]).toBe(guestLives); // no penalty
+
+    // the host places, and the voice passes to the guest
+    await climb(host, words[0]);
+    await guest.waitForFunction((id) => window.__topple.state().tower.run.voice === id,
+      guestId, { polling: 50 });
+    await climb(guest, words[1]);
+    expect((await towerState(guest)).height).toBe(h0 + 2);
   });
 
   test('decree difficulty pools: all survivable over a long game, and every decree is clearable with RECOGNIZABLE words', () => {

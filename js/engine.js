@@ -15,6 +15,7 @@ import { mulberry32, hashSeed, dailyKey, dailyNumber } from './rng.js';
 import {
   RELICS, MAX_RELICS, REROLL_COST, dealRelics, grants, hungerFor,
 } from './relics.js';
+import { BOSSES, isBossStorey, pickBoss, mergeConstraints } from './bosses.js';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard', 'ramp'];
 
@@ -198,14 +199,28 @@ export class Engine {
           placed: new Set(),     // who has landed a word this storey (CHORUS)
           freeMiss: {},          // who has spent their SCAFFOLD this storey
           insured: false,        // INSURANCE fires once per run
+          boss: null,            // the storey-long rule, on boss storeys
+          bossSeen: [],          // so a run doesn't repeat one until it must
+          voice: null,           // THE SILENCE: whose turn it is
         }
         : null,
       lastWordAt: 0,
     };
     this.tower.constraint = genConstraint(
       1, this.tower.used, this.tower.difficulty, this.tower.rampWords, null, this.tower.rng);
+    if (this.tower.run) this.assignBoss();
     this.broadcastTower();
     this.armHunger();
+  }
+
+  // What the room must actually satisfy: the drafted decree AND the boss's
+  // stateless half, if any.
+  liveConstraint() {
+    const t = this.tower;
+    const boss = t.run && t.run.boss ? BOSSES[t.run.boss] : null;
+    return boss && boss.constraint
+      ? mergeConstraints(t.constraint, boss.constraint)
+      : t.constraint;
   }
 
   broadcastTower(extra = {}) {
@@ -223,6 +238,7 @@ export class Engine {
       storey: r.storey, quota: r.quota, storeyScore: r.storeyScore,
       mortar: r.mortar, phase: r.phase, storeys: ASCENT.storeys,
       relics: Object.fromEntries(Object.entries(r.relics).map(([k, v]) => [k, [...v]])),
+      boss: r.boss, voice: r.voice,
     } : null;
   }
 
@@ -263,6 +279,8 @@ export class Engine {
       storey: r.storey, quota: r.quota, storeyScore: r.storeyScore,
       mortar: r.mortar, earned, lives: { ...t.lives }, last,
       offers: { ...r.offers }, relics: this.runInfo().relics,
+      // so the table can warn you what you're buying relics FOR
+      nextBoss: last ? null : this.previewBoss(r.storey + 1),
     });
     if (last) this.timers.next = setTimeout(() => this.crown(), 1200);
   }
@@ -284,6 +302,7 @@ export class Engine {
     r.placed = new Set();
     r.freeMiss = {};
     r.offers = {};
+    this.assignBoss();
     t.constraint = genConstraint(
       t.stage, t.used, t.difficulty, t.rampWords, t.constraint, t.rng);
     this.broadcastTower({ storeyStart: r.storey });
@@ -325,6 +344,36 @@ export class Engine {
     r.mortar -= REROLL_COST;
     r.offers[from] = dealRelics(r.relics[from] || [], 3, t.rng);
     this.broadcastRelics({ rerolled: from });
+  }
+
+  // What storey n+1 will bring, without consuming any randomness - the actual
+  // pick happens in assignBoss(). Only the fact that there IS one is promised.
+  previewBoss(storey) {
+    return isBossStorey(storey, ASCENT.storeys) ? 'boss' : null;
+  }
+
+  assignBoss() {
+    const t = this.tower;
+    const r = t.run;
+    r.boss = null;
+    r.voice = null;
+    if (!isBossStorey(r.storey, ASCENT.storeys)) return;
+    r.boss = pickBoss(r.bossSeen, t.rng);
+    r.bossSeen.push(r.boss);
+    const b = BOSSES[r.boss];
+    if (b.solo) r.voice = (this.activePlayers()[0] || {}).id || null;
+    this.net.emit(EV.BOSS, {
+      id: r.boss, name: b.name, short: b.short, desc: b.desc, storey: r.storey,
+    });
+  }
+
+  // THE SILENCE hands the floor to the next living player after every word.
+  rotateVoice() {
+    const r = this.tower.run;
+    const alive = this.activePlayers().filter((p) => (this.tower.lives[p.id] ?? 0) > 0);
+    if (alive.length === 0) { r.voice = null; return; }
+    const i = alive.findIndex((p) => p.id === r.voice);
+    r.voice = alive[(i + 1) % alive.length].id;
   }
 
   // The only win in the game.
@@ -401,7 +450,10 @@ export class Engine {
   effectiveHungerMs() {
     const t = this.tower;
     if (!t) return TOWER.hungerMs;
-    return t.run ? hungerFor(t.hungerMs, t.run.relics) : t.hungerMs;
+    let ms = t.run ? hungerFor(t.hungerMs, t.run.relics) : t.hungerMs;
+    const boss = t.run && t.run.boss ? BOSSES[t.run.boss] : null;
+    if (boss && boss.hungerMul) ms = Math.max(6000, Math.round(ms * boss.hungerMul));
+    return ms;
   }
 
   // `lives` is the single source of truth; burial is derived from it. Call this
@@ -497,16 +549,33 @@ export class Engine {
     if ((t.lives[from] ?? 0) <= 0) return this.onDigGuess(word, from);
 
     const mine = t.run ? (t.run.relics[from] || []) : [];
+    const boss = t.run && t.run.boss ? BOSSES[t.run.boss] : null;
     if (!isValidGuess(word)) return this.towerMiss(from, word, 'not a word');
+
+    // THE SILENCE is a turn order, not a trap: speaking out of turn is refused
+    // outright rather than punished.
+    if (boss && boss.solo && t.run.voice && t.run.voice !== from) {
+      this.net.emit(EV.SHOP_ERR, { to: from, reason: 'THE SILENCE — not your voice' });
+      return;
+    }
+
     if (this.towerOnScreen(word) && !grants(mine, 'allowDuplicate')) {
       return this.towerMiss(from, word, 'already in the tower');
     }
     // BLOOD MORTAR builds the illegal word anyway and takes the life for it -
     // a miss that becomes a floor, which is the whole trade.
     let bled = false;
-    if (!matchesConstraint(word, t.constraint)) {
-      if (!grants(mine, 'forcePlace')) return this.towerMiss(from, word, 'breaks the decree');
+    if (!matchesConstraint(word, this.liveConstraint())) {
+      if (!grants(mine, 'forcePlace')) {
+        return this.towerMiss(from, word,
+          matchesConstraint(word, t.constraint) ? `breaks ${boss.name}` : 'breaks the decree');
+      }
       bled = true;
+    }
+    if (boss && boss.check) {
+      const below = t.rows.length ? t.rows[t.rows.length - 1].word : null;
+      const bad = boss.check(word, { below });
+      if (bad) return this.towerMiss(from, word, `${boss.name} — ${bad}`);
     }
 
     // accepted: the tower grows
@@ -520,16 +589,24 @@ export class Engine {
     if (t.rows.length > 60) t.rows.shift();
     if (t.run) { t.run.storeyScore += points; t.run.placed.add(from); }
     t.lastWordAt = now();
+    // rotate BEFORE the broadcast so the new voice rides along with the word,
+    // rather than needing a whole tower snapshot to travel
+    if (boss && boss.solo) this.rotateVoice();
     this.net.emit(EV.TOWER_WORD, {
       pid: from, word, points, height: t.height, combo: t.combo, stage: t.stage,
       storeyScore: t.run ? t.run.storeyScore : undefined,
+      voice: t.run ? t.run.voice : undefined,
     });
     this.armHunger();
+    // THE TAX: the word stands, and it costs
+    if (boss && boss.toll && boss.toll(word)) bled = true;
     if (bled) {
       t.lives[from] = Math.max(0, (t.lives[from] ?? 0) - 1);
       this.syncBuried();
       this.net.emit(EV.TOWER_MISS, {
-        pid: from, word, reason: 'forced through in blood', lives: { ...t.lives },
+        pid: from, word,
+        reason: boss && boss.toll && boss.toll(word) ? `${boss.name} took its cut` : 'forced through in blood',
+        lives: { ...t.lives },
         combo: t.combo, buried: (t.lives[from] ?? 0) <= 0, forced: true,
       });
       if (this.everyoneBuried()) { this.endTower(); return; }
@@ -748,6 +825,11 @@ export class Engine {
     // left standing.
     if (this.tower) {
       delete this.tower.buried[pid];
+      // a departing voice must not freeze the storey for everyone else
+      if (this.tower.run && this.tower.run.voice === pid) {
+        this.rotateVoice();
+        this.broadcastTower();
+      }
       if (this.activePlayers().length === 0 || this.everyoneBuried()) { this.endTower(); return; }
     }
 
