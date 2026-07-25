@@ -1,23 +1,23 @@
 // Central configuration. The Supabase project is shared with the sibling games
-// FRIENDLE (channel prefix `friendle:`) and HMMM? (`hmmm:`); TO-WORD MUST keep
-// its own `toword:` prefix or rooms from different games would collide.
+// FRIENDLE (channel prefix `friendle:`) and HMMM? (`hmmm:`); TOPPLE MUST keep
+// its own `topple:` prefix or rooms from different games would collide.
 export const SUPABASE_URL = 'https://lapkrvmlmwfrwqmzxukt.supabase.co';
 export const SUPABASE_KEY = 'sb_publishable_M9Xu80-XQ1Vyjg55T-Cp8g_2EnL2_Mm';
-export const CHANNEL_PREFIX = 'toword:';
+export const CHANNEL_PREFIX = 'topple:';
 
 // localStorage / sessionStorage keys - namespaced for the same reason.
 export const STORE = {
-  name: 'toword-name',
-  sound: 'toword-sound',
-  theme: 'toword-theme',
-  id: 'toword-id',
+  name: 'topple-name',
+  sound: 'topple-sound',
+  theme: 'topple-theme',
+  id: 'topple-id',
 };
 
 // Room codes: 4 chars, no lookalikes (O/0, I/1 excluded).
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const CODE_LEN = 4;
 
-export const MIN_PLAYERS = 1;   // TO-WORD is co-op: solo is a legitimate run
+export const MIN_PLAYERS = 1;   // TOPPLE is co-op: solo is a legitimate run
 export const MAX_PLAYERS = 4;
 export const WORD_LEN = 5;
 export const MAX_ROWS = 6;      // the revive wordle's grid

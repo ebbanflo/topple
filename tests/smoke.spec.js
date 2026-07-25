@@ -4,7 +4,7 @@ import { openPage, hostGame, joinGame, state } from './helpers.js';
 test.describe('shell', () => {
   test('menu loads, theme inverts and persists, help opens', async ({ context }) => {
     const page = await openPage(context);
-    await expect(page.locator('.big-title')).toContainText('TO-WORD');
+    await expect(page.locator('.big-title')).toContainText('TOPPLE');
     // black on white by default
     expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('light');
     await page.click('#btn-theme');
@@ -26,8 +26,8 @@ test.describe('shell', () => {
 
     const guest = await openPage(context);
     await joinGame(guest, code, 'GUEST');
-    await host.waitForFunction(() => window.__toword.state().players.length === 2);
-    await guest.waitForFunction(() => window.__toword.state().players.length === 2);
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
+    await guest.waitForFunction(() => window.__topple.state().players.length === 2);
 
     const names = (await state(host)).players.map((p) => p.name);
     expect(names).toEqual(['HOST', 'GUEST']);

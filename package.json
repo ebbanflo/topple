@@ -1,12 +1,12 @@
 {
-  "name": "toword",
+  "name": "topple",
   "version": "1.0.0",
   "private": true,
-  "description": "TO-WORD — co-op word tower. Static site; this package.json exists only for the Playwright E2E suite.",
+  "description": "TOPPLE — co-op word tower. Static site; this package.json exists only for the Playwright E2E suite.",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ebbanflo/toword"
+    "url": "https://github.com/ebbanflo/topple"
   },
   "scripts": {
     "serve": "python3 -m http.server 4173 --bind 127.0.0.1",

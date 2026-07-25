@@ -34,7 +34,7 @@ export const now = () => Date.now();
 // keeps the revive secret and rival guesses out of casual network-tab
 // plaintext - it is NOT cryptography).
 export function obf(word, key) {
-  const k = 'toword■' + key;
+  const k = 'topple■' + key;
   let out = '';
   for (let i = 0; i < word.length; i++) {
     out += String.fromCharCode(word.charCodeAt(i) ^ k.charCodeAt(i % k.length));
@@ -42,7 +42,7 @@ export function obf(word, key) {
   return btoa(out);
 }
 export function deobf(s, key) {
-  const k = 'toword■' + key;
+  const k = 'topple■' + key;
   const raw = atob(s);
   let out = '';
   for (let i = 0; i < raw.length; i++) {

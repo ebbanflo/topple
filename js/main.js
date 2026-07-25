@@ -48,7 +48,7 @@ async function hostGame(name) {
   try {
     await connect(makeCode());
     S.engine = new Engine(S.net, S.code, { id: S.selfId, name });
-    if (DEBUG) window.__toword.engine = S.engine;
+    if (DEBUG) window.__topple.engine = S.engine;
     S.engine.broadcastLobby();
   } catch (e) {
     ui.showDead(e.message || ERR_NAPPING);
@@ -140,7 +140,7 @@ function installDebug() {
   // stays off the wire until that rescue ends)
   window.__wireLog = [];
   S.net.onAny((env) => window.__wireLog.push(JSON.stringify(env)));
-  window.__toword = {
+  window.__topple = {
     code: S.code,
     selfId: S.selfId,
     net: S.net,

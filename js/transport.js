@@ -32,7 +32,7 @@ export class LocalTransport {
   }
 
   async connect() {
-    this.bc = new BroadcastChannel('toword-local:' + this.code);
+    this.bc = new BroadcastChannel('topple-local:' + this.code);
     this.bc.onmessage = (e) => {
       const m = e.data;
       if (m && m.__hb) {
@@ -101,7 +101,7 @@ export class SupabaseTransport {
         realtime: { params: { eventsPerSecond: 20 } },
       });
     }
-    // One public channel per room; the `toword:` prefix keeps rooms disjoint
+    // One public channel per room; the `topple:` prefix keeps rooms disjoint
     // from the sibling games' channels in the same project.
     this.channel = sbClient.channel(CHANNEL_PREFIX + this.code, {
       config: { broadcast: { self: false, ack: false }, presence: { key: this.self.id } },

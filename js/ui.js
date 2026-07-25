@@ -46,9 +46,9 @@ export class UI {
   // ---------- static DOM ----------
   buildStaticDom() {
     const title = $('scr-menu').querySelector('.big-title');
-    for (const [i, ch] of [...'TO-WORD'].entries()) {
+    for (const [i, ch] of [...'TOPPLE'].entries()) {
       title.append(el('span', {
-        class: 'title-glyph' + (ch === '-' ? ' title-dash' : ''),
+        class: 'title-glyph',
         text: ch,
         style: { animationDelay: `${i * 0.055}s` },
       }));

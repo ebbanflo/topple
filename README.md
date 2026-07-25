@@ -1,4 +1,4 @@
-# TO-WORD
+# TOPPLE
 
 A co-op word tower for 1–4 players. Stack real 5-letter words into a shared
 structure; every word must obey the current **decree**. Misses cost lives, the
@@ -77,7 +77,7 @@ the tower, the HUD or a rescue is doing. Two E2E tests assert exactly that.
 ### Infrastructure
 
 Shares one Supabase project with its sibling games. Channels are namespaced by
-prefix (`toword:`, `friendle:`, `hmmm:`), so rooms from different games can
+prefix (`topple:`, `friendle:`, `hmmm:`), so rooms from different games can
 never collide even on the same code. Storage keys are namespaced the same way.
 No tables, no auth, no rows — just Realtime broadcast and presence.
 
@@ -92,7 +92,7 @@ npm run serve     # http://127.0.0.1:4173
 ```
 
 Query flags: `?t=local` swaps Supabase for `BroadcastChannel` (multi-tab, zero
-network), `?debug=1` installs the `window.__toword` test handle, `?join=CODE`
+network), `?debug=1` installs the `window.__topple` test handle, `?join=CODE`
 jumps straight into a room.
 
 ## Tests

@@ -1,5 +1,5 @@
 // Decree (constraint) generation + matching + RPG scoring - the rules engine
-// of TO-WORD.
+// of TOPPLE.
 // Pure functions over the guess dictionary - the engine (host) generates and
 // judges; clients only render what they're told.
 

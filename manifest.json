@@ -1,6 +1,6 @@
 {
-  "name": "TO-WORD — build the tower, obey the decree",
-  "short_name": "TO-WORD",
+  "name": "TOPPLE — a co-op word tower",
+  "short_name": "TOPPLE",
   "description": "Co-op word tower for 1–4 players. Stack real 5-letter words under an escalating decree. Room-code multiplayer, no accounts.",
   "start_url": ".",
   "scope": ".",

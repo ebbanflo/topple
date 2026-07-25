@@ -1,4 +1,4 @@
-/* TO-WORD — ink on paper, courier, and one tower rendered in real CSS 3D.
+/* TOPPLE — ink on paper, courier, and one tower rendered in real CSS 3D.
    Two themes, both first-class: `light` (black on white, the default) and
    `dark` (white on black). Everything below is driven off the token block;
    nothing hard-codes a color outside it. */
@@ -126,7 +126,6 @@ body { transition: background .28s ease, color .28s ease; }
   display: inline-block;
   animation: glyph-set .5s cubic-bezier(.2, .9, .25, 1) both;
 }
-.title-dash { color: var(--ink-3); }
 @keyframes glyph-set {
   from { opacity: 0; transform: translateY(-.5em) rotate(-8deg); }
 }

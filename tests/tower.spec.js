@@ -29,7 +29,7 @@ function findNonMatching(constraint, used) {
   return GUESSES.find((w) => !usedSet.has(w) && !matchesConstraint(w, constraint));
 }
 
-test.describe('to-word', () => {
+test.describe('topple', () => {
   test('decree generator: every stage is survivable and matching is sound', () => {
     expect(matchesConstraint('crane', { req: ['c', 'e'] })).toBe(true);
     expect(matchesConstraint('crane', { req: ['z'] })).toBe(false);
@@ -74,7 +74,7 @@ test.describe('to-word', () => {
     let t = await towerState(host);
     expect(t.stage).toBe(1);
     expect(t.height).toBe(0);
-    const hostId = await host.evaluate(() => window.__toword.selfId);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
     expect(t.lives[hostId]).toBe(3);
     await expect(host.locator('#tower-scene')).toBeVisible();
     await expect(host.locator('#decree')).not.toHaveText('');
@@ -84,7 +84,7 @@ test.describe('to-word', () => {
     for (const ch of w1) await host.click(`[data-testid="key-${ch}"]`);
     await expect(host.locator('[data-testid="twr-in-0"]')).toHaveText(w1[0].toUpperCase());
     await host.click('[data-testid="key-enter"]');
-    await host.waitForFunction(() => window.__toword.state().tower.height === 1, null, { polling: 100 });
+    await host.waitForFunction(() => window.__topple.state().tower.height === 1, null, { polling: 100 });
     t = await towerState(host);
     expect(t.rows[0].word).toBe(w1);
     expect(t.rows[0].points).toBe(wordPoints(w1, 1, 1));
@@ -98,7 +98,7 @@ test.describe('to-word', () => {
     // word 2 -> rampWords=2 reached -> stage 2, decree changes
     const [w2] = findWords(t.constraint, [w1], 1);
     await climb(host, w2);
-    await host.waitForFunction(() => window.__toword.state().tower.stage === 2, null, { polling: 100 });
+    await host.waitForFunction(() => window.__topple.state().tower.stage === 2, null, { polling: 100 });
 
     // misses: not-a-word, duplicate, decree-breaker - one life each
     await miss(host, 'zzzzz');
@@ -106,7 +106,7 @@ test.describe('to-word', () => {
     t = await towerState(host);
     const breaker = findNonMatching(t.constraint, [w1, w2]);
     await miss(host, breaker); // life 3 gone -> solo team downed -> the tower falls
-    await host.waitForFunction(() => window.__toword.state().over, null, { polling: 100 });
+    await host.waitForFunction(() => window.__topple.state().over, null, { polling: 100 });
     const over = (await state(host)).gameover;
     expect(over.reason).toBe('the tower fell');
     expect(over.height).toBe(2);
@@ -122,9 +122,9 @@ test.describe('to-word', () => {
     const code = await hostGame(host, 'CLERIC', { ...FAST, rampWords: 50, hungerMs: 600000 });
     const pA = await openPage(context);
     await joinGame(pA, code, 'FALLEN');
-    await host.waitForFunction(() => window.__toword.state().players.length === 2);
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
     const [hostId, aId] = await host.evaluate(() =>
-      window.__toword.state().players.map((p) => p.id));
+      window.__topple.state().players.map((p) => p.id));
     await startGame(host, [host, pA]);
     await waitTower(host);
     await waitTower(pA);
@@ -133,9 +133,9 @@ test.describe('to-word', () => {
     await miss(pA, 'zzzzz');
     await miss(pA, 'qqqqq');
     await miss(pA, 'jjjjj');
-    await pA.waitForFunction(() => window.__toword.state().inputLocked, null, { polling: 100 });
+    await pA.waitForFunction(() => window.__topple.state().inputLocked, null, { polling: 100 });
     await expect(host.locator(`[data-testid="lives-${aId}"]`)).toHaveText('—');
-    expect(await pA.evaluate(() => window.__toword.guess('crane'))).toBe(false);
+    expect(await pA.evaluate(() => window.__topple.guess('crane'))).toBe(false);
 
     // host keeps climbing (solo now), then buys a revive through the UI
     let t = await towerState(host);
@@ -145,22 +145,22 @@ test.describe('to-word', () => {
     await host.click('[data-testid="shop-revive"]');
     await host.click(`[data-testid="pick-${aId}"]`);
     await host.click('#btn-picker-go');
-    await host.waitForFunction(() => !!window.__toword.state().tower.revives[window.__toword.selfId], null, { polling: 100 });
+    await host.waitForFunction(() => !!window.__topple.state().tower.revives[window.__topple.selfId], null, { polling: 100 });
     expect((await state(host)).players.find((p) => p.id === hostId).score).toBe(45000);
 
     // the rescue wordle: one wrong guess (visible to the fallen teammate), then the solve
-    const secret = await host.evaluate((pid) => window.__toword.reviveSecret(pid), hostId);
+    const secret = await host.evaluate((pid) => window.__topple.reviveSecret(pid), hostId);
     expect(secret).toMatch(/^[a-z]{5}$/);
     const wrong = ['crane', 'slimy', 'pouty'].find((w) => w !== secret);
-    await host.evaluate((w) => window.__toword.guess(w), wrong);
+    await host.evaluate((w) => window.__topple.guess(w), wrong);
     await pA.waitForFunction((h) => {
-      const rev = window.__toword.state().tower.revives[h];
+      const rev = window.__topple.state().tower.revives[h];
       return rev && rev.rows.length === 1;
     }, hostId, { polling: 100 });
     await expect(pA.locator('[data-testid="rev-0-0"]')).toHaveText(wrong[0].toUpperCase());
-    await host.evaluate((w) => window.__toword.guess(w), secret);
-    await pA.waitForFunction((a) => window.__toword.state().tower.lives[a] === 2, aId, { polling: 100 });
-    await pA.waitForFunction(() => !window.__toword.state().inputLocked, null, { polling: 100 });
+    await host.evaluate((w) => window.__topple.guess(w), secret);
+    await pA.waitForFunction((a) => window.__topple.state().tower.lives[a] === 2, aId, { polling: 100 });
+    await pA.waitForFunction(() => !window.__topple.state().inputLocked, null, { polling: 100 });
 
     // the revived player can climb again
     t = await towerState(pA);
@@ -168,12 +168,12 @@ test.describe('to-word', () => {
     await climb(pA, w2);
 
     // hunger: silence bleeds every living player
-    await host.evaluate(() => { window.__toword.engine.tower.hungerMs = 900; });
+    await host.evaluate(() => { window.__topple.engine.tower.hungerMs = 900; });
     t = await towerState(host);
     const [w3] = findWords(t.constraint, await usedWords(host), 1);
     await climb(host, w3); // re-arms the hunger clock at 900ms
     await host.waitForFunction(([h, a]) => {
-      const lv = window.__toword.state().tower.lives;
+      const lv = window.__topple.state().tower.lives;
       return lv[h] === 2 && lv[a] === 1;
     }, [hostId, aId], { polling: 100 });
 
@@ -181,7 +181,7 @@ test.describe('to-word', () => {
     await miss(host, 'zzzzz');
     await miss(host, 'qqqqq'); // host down
     await miss(pA, 'zzzzz');   // A down -> all down
-    await pA.waitForFunction(() => window.__toword.state().over, null, { polling: 100 });
+    await pA.waitForFunction(() => window.__topple.state().over, null, { polling: 100 });
     const over = (await state(pA)).gameover;
     expect(over.reason).toBe('the tower fell');
     expect(over.height).toBe(3);
@@ -193,20 +193,20 @@ test.describe('to-word', () => {
     const code = await hostGame(host, 'PRIEST', { ...FAST, rampWords: 999, hungerMs: 600000 });
     const pA = await openPage(context);
     await joinGame(pA, code, 'DOWNED');
-    await host.waitForFunction(() => window.__toword.state().players.length === 2);
-    const aId = await pA.evaluate(() => window.__toword.selfId);
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
+    const aId = await pA.evaluate(() => window.__topple.selfId);
     await startGame(host, [host, pA]);
     await waitTower(host);
     await waitTower(pA);
 
     // no decree noise: any distinct dictionary word is acceptable
-    await host.evaluate(() => { window.__toword.engine.tower.constraint = {}; });
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
     // A flames out completely (3 misses) while the tower keeps climbing
     await miss(pA, 'zzzzz');
     await miss(pA, 'qqqqq');
     await miss(pA, 'jjjjj');
-    await pA.waitForFunction(() => window.__toword.state().inputLocked, null, { polling: 100 });
+    await pA.waitForFunction(() => window.__topple.state().inputLocked, null, { polling: 100 });
     expect((await towerState(host)).lives[aId]).toBe(0);
 
     // host climbs 10 distinct words alone -> height-10 milestone fires
@@ -221,12 +221,12 @@ test.describe('to-word', () => {
     }
     expect(placed).toBe(10);
 
-    await host.waitForFunction(() => window.__toword.state().tower.height === 10, null, { polling: 100 });
+    await host.waitForFunction(() => window.__topple.state().tower.height === 10, null, { polling: 100 });
     // the milestone revived the downed teammate...
-    await pA.waitForFunction((id) => window.__toword.state().tower.lives[id] === 1, aId, { polling: 100 });
-    await pA.waitForFunction(() => !window.__toword.state().inputLocked, null, { polling: 100 });
+    await pA.waitForFunction((id) => window.__topple.state().tower.lives[id] === 1, aId, { polling: 100 });
+    await pA.waitForFunction(() => !window.__topple.state().inputLocked, null, { polling: 100 });
     // ...and the host (who never lost a life) gained one too, capped by maxLives
-    const hostId = await host.evaluate(() => window.__toword.selfId);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
     let t = await towerState(host);
     expect(t.lives[hostId]).toBe(4); // 3 start + 1 milestone
     expect(t.lives[aId]).toBe(1);    // 0 -> revived to 1
@@ -254,10 +254,10 @@ test.describe('to-word', () => {
     await hostGame(host, 'BARD', { ...FAST, rampWords: 999, hungerMs: 600000 });
     await host.click('#btn-start');
     await waitTower(host);
-    const hostId = await host.evaluate(() => window.__toword.selfId);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
 
     // clear the decree so any word starting with the target letter qualifies
-    await host.evaluate(() => { window.__toword.engine.tower.constraint = {}; });
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
     // five real words whose FIRST letters spell T-O-W-E-R down the column
     const wordStartingWith = (ch) => GUESSES.find((w) => /^[a-z]{5}$/.test(w) && w[0] === ch);
@@ -271,7 +271,7 @@ test.describe('to-word', () => {
     expect(t.height).toBe(4); // not a height-10 milestone - isolates the easter egg
 
     await climb(host, towerWords[4]);
-    await host.waitForFunction((b) => window.__toword.state().tower.lives[window.__toword.selfId] === b + 1, before, { polling: 100 });
+    await host.waitForFunction((b) => window.__topple.state().tower.lives[window.__topple.selfId] === b + 1, before, { polling: 100 });
     t = await towerState(host);
     expect(t.height).toBe(5);
     expect(t.lives[hostId]).toBe(before + 1);
@@ -286,27 +286,27 @@ test.describe('to-word', () => {
     await joinGame(pA, code, 'CASTER');
     const pB = await openPage(context); // bystander: neither reviving nor downed
     await joinGame(pB, code, 'ROGUE');
-    await host.waitForFunction(() => window.__toword.state().players.length === 3);
-    const hostId = await host.evaluate(() => window.__toword.selfId);
-    const aId = await pA.evaluate(() => window.__toword.selfId);
+    await host.waitForFunction(() => window.__topple.state().players.length === 3);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
+    const aId = await pA.evaluate(() => window.__topple.selfId);
     await startGame(host, [host, pA, pB]);
     await waitTower(host); await waitTower(pA); await waitTower(pB);
-    await host.evaluate(() => { window.__toword.engine.tower.constraint = {}; });
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
     // A goes down; host and B stay up
     await miss(pA, 'zzzzz');
     await miss(pA, 'qqqqq');
     await miss(pA, 'jjjjj');
-    await pA.waitForFunction(() => window.__toword.state().inputLocked, null, { polling: 100 });
+    await pA.waitForFunction(() => window.__topple.state().inputLocked, null, { polling: 100 });
 
     await setScore(host, hostId, 50000);
     await host.click('[data-testid="shop-revive"]');
     await host.click(`[data-testid="pick-${aId}"]`);
     await host.click('#btn-picker-go');
-    await host.waitForFunction(() => !!window.__toword.state().tower.revives[window.__toword.selfId], null, { polling: 100 });
+    await host.waitForFunction(() => !!window.__topple.state().tower.revives[window.__topple.selfId], null, { polling: 100 });
     expect((await towerState(host)).hungerPaused).toBe(true);
     await expect(host.locator('#hunger-label')).toBeVisible();
-    await pB.waitForFunction(() => window.__toword.state().tower.hungerPaused, null, { polling: 100 });
+    await pB.waitForFunction(() => window.__topple.state().tower.hungerPaused, null, { polling: 100 });
 
     // sit well past hungerMs (900ms) WITHOUT finishing the revive - nobody bleeds
     const livesBefore = (await towerState(host)).lives;
@@ -319,17 +319,17 @@ test.describe('to-word', () => {
     expect((await towerState(pB)).height).toBe(1);
 
     // now solve the revive
-    const secret = await host.evaluate((pid) => window.__toword.reviveSecret(pid), hostId);
-    await host.evaluate((w) => window.__toword.guess(w), secret);
-    await pA.waitForFunction((id) => window.__toword.state().tower.lives[id] === 2, aId, { polling: 100 });
-    await host.waitForFunction(() => !window.__toword.state().tower.hungerPaused, null, { polling: 100 });
+    const secret = await host.evaluate((pid) => window.__topple.reviveSecret(pid), hostId);
+    await host.evaluate((w) => window.__topple.guess(w), secret);
+    await pA.waitForFunction((id) => window.__topple.state().tower.lives[id] === 2, aId, { polling: 100 });
+    await host.waitForFunction(() => !window.__topple.state().tower.hungerPaused, null, { polling: 100 });
     await expect(host.locator('#hunger-label')).toBeHidden();
 
     // the clock resumed fresh: waiting past hungerMs again now DOES bleed
     await host.waitForFunction(([h, a, b]) => {
-      const lv = window.__toword.state().tower.lives;
+      const lv = window.__topple.state().tower.lives;
       return lv[h] < 3 || lv[a] < 2 || lv[b] < 3;
-    }, [hostId, aId, await pB.evaluate(() => window.__toword.selfId)], { polling: 100, timeout: 15000 });
+    }, [hostId, aId, await pB.evaluate(() => window.__topple.selfId)], { polling: 100, timeout: 15000 });
   });
 
   test('lobby LEVEL + DECREE: four levels (no STD), 3/5/10 words per decree, live-sync and real pacing', async ({ context }) => {
@@ -337,7 +337,7 @@ test.describe('to-word', () => {
     const code = await hostGame(host, 'DEALER', FAST);
     const guest = await openPage(context);
     await joinGame(guest, code, 'WATCH');
-    await host.waitForFunction(() => window.__toword.state().players.length === 2);
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
 
     // LEVEL has exactly the four decree bands and defaults to RAMP
     await expect(host.locator('#set-diff')).toBeVisible();
@@ -353,15 +353,15 @@ test.describe('to-word', () => {
     // host picks HARD + DECREE 3 - live-syncs to the guest
     await host.click('[data-setting="difficulty"] [data-val="hard"]');
     await host.click('[data-setting="rampWords"] [data-val="3"]');
-    await guest.waitForFunction(() => window.__toword.state().settings?.rampWords === 3
-      && window.__toword.state().settings?.difficulty === 'hard', null, { polling: 100 });
+    await guest.waitForFunction(() => window.__topple.state().settings?.rampWords === 3
+      && window.__topple.state().settings?.difficulty === 'hard', null, { polling: 100 });
     await expect(guest.locator('[data-setting="difficulty"] [data-val="hard"]')).toHaveClass(/\bon\b/);
     await expect(guest.locator('[data-setting="rampWords"] [data-val="3"]')).toHaveClass(/\bon\b/);
 
     // and it actually drives pacing: stage 2 arrives after just 3 words, on the hard pool
     await startGame(host, [host, guest]);
     await waitTower(host);
-    const towerNow = await host.evaluate(() => window.__toword.engineState().tower);
+    const towerNow = await host.evaluate(() => window.__topple.engineState().tower);
     expect(towerNow.rampWords).toBe(3);
     expect(towerNow.difficulty).toBe('hard');
     let t = await towerState(host);
@@ -373,7 +373,7 @@ test.describe('to-word', () => {
     expect(t.stage).toBe(1);
     const [wLast] = findWords(t.constraint, await usedWords(host), 1);
     await climb(host, wLast);
-    await host.waitForFunction(() => window.__toword.state().tower.stage === 2, null, { polling: 100 });
+    await host.waitForFunction(() => window.__topple.state().tower.stage === 2, null, { polling: 100 });
   });
 
   test('decree difficulty pools: all survivable over a long game, and every decree is clearable with RECOGNIZABLE words', () => {
@@ -465,7 +465,7 @@ test.describe('to-word', () => {
     await hostGame(host, 'ANCHOR', { ...FAST, rampWords: 999, hungerMs: 600000 });
     await host.click('#btn-start');
     await waitTower(host);
-    await host.evaluate(() => { window.__toword.engine.tower.constraint = {}; });
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
     // offsetTop, not boundingBox: layout position only, immune to the screen's
     // entry transform (and to the tower's own 3D transforms)
@@ -497,7 +497,7 @@ test.describe('to-word', () => {
     await hostGame(host, 'REPLAY', { ...FAST, rampWords: 999, hungerMs: 600000 });
     await host.click('#btn-start');
     await waitTower(host);
-    await host.evaluate(() => { window.__toword.engine.tower.constraint = {}; });
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
     const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 30);
     const first = words[0];
@@ -513,10 +513,10 @@ test.describe('to-word', () => {
     expect(t.height).toBe(11);
     const onScreen = t.rows.slice(-10).map((r) => r.word);
     expect(onScreen).not.toContain(first);
-    expect(await host.evaluate((w) => window.__toword.engine.towerOnScreen(w), first)).toBe(false);
+    expect(await host.evaluate((w) => window.__topple.engine.towerOnScreen(w), first)).toBe(false);
 
     // so `first` is accepted again - the tower grows, no life lost
-    const hostId = await host.evaluate(() => window.__toword.selfId);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
     const livesBefore = (await towerState(host)).lives[hostId];
     await climb(host, first);
     t = await towerState(host);
@@ -549,7 +549,7 @@ test.describe('to-word', () => {
     await hostGame(host, 'POCKET', { ...FAST, rampWords: 999, hungerMs: 600000 });
     await host.click('#btn-start');
     await waitTower(host);
-    await host.evaluate(() => { window.__toword.engine.tower.constraint = {}; });
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
     // overfill the window so all 10 mounted floors are present
     const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 12);
@@ -592,11 +592,11 @@ test.describe('to-word', () => {
 
     await host.click('#btn-pause');
     await expect(host.locator('#ovl-pause')).toBeVisible();
-    expect(await host.evaluate(() => window.__toword.ui.paused)).toBe(true);
+    expect(await host.evaluate(() => window.__topple.ui.paused)).toBe(true);
 
     await host.click('#btn-resume');
     await expect(host.locator('#ovl-pause')).toBeHidden();
-    expect(await host.evaluate(() => window.__toword.state().inputLocked)).toBe(false);
+    expect(await host.evaluate(() => window.__topple.state().inputLocked)).toBe(false);
 
     // still fully playable after a pause/resume cycle
     const t = await towerState(host);
@@ -613,12 +613,12 @@ test.describe('to-word', () => {
     await joinGame(pA, code, 'FALLEN');
     const pB = await openPage(context); // bystander: keeps climbing throughout
     await joinGame(pB, code, 'ROGUE');
-    await host.waitForFunction(() => window.__toword.state().players.length === 3);
-    const hostId = await host.evaluate(() => window.__toword.selfId);
-    const aId = await pA.evaluate(() => window.__toword.selfId);
+    await host.waitForFunction(() => window.__topple.state().players.length === 3);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
+    const aId = await pA.evaluate(() => window.__topple.selfId);
     await startGame(host, [host, pA, pB]);
     await Promise.all([host, pA, pB].map(waitTower));
-    await host.evaluate(() => { window.__toword.engine.tower.constraint = {}; });
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
     const keyboardY = (page) => page.locator('#keyboard').evaluate((el) => el.offsetTop);
     const yBefore = await keyboardY(host);
@@ -627,15 +627,15 @@ test.describe('to-word', () => {
 
     // A goes down
     await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); await miss(pA, 'jjjjj');
-    await pA.waitForFunction(() => window.__toword.state().inputLocked, null, { polling: 100 });
+    await pA.waitForFunction(() => window.__topple.state().inputLocked, null, { polling: 100 });
 
     await setScore(host, hostId, 50000);
     await host.click('[data-testid="shop-revive"]');
     await host.click(`[data-testid="pick-${aId}"]`);
     await host.click('#btn-picker-go');
-    await host.waitForFunction(() => !!window.__toword.state().tower.revives[window.__toword.selfId], null, { polling: 100 });
-    await pA.waitForFunction(() => Object.keys(window.__toword.state().tower.revives).length > 0, null, { polling: 100 });
-    await pB.waitForFunction(() => Object.keys(window.__toword.state().tower.revives).length > 0, null, { polling: 100 });
+    await host.waitForFunction(() => !!window.__topple.state().tower.revives[window.__topple.selfId], null, { polling: 100 });
+    await pA.waitForFunction(() => Object.keys(window.__topple.state().tower.revives).length > 0, null, { polling: 100 });
+    await pB.waitForFunction(() => Object.keys(window.__topple.state().tower.revives).length > 0, null, { polling: 100 });
 
     // the swap: tower hidden, rescue grid visible, on EVERY screen
     for (const page of [host, pA, pB]) {
@@ -659,9 +659,9 @@ test.describe('to-word', () => {
     expect((await towerState(pB)).height).toBe(1);
 
     // solve the revive - the tower comes back for everyone, keyboard still stable
-    const secret = await host.evaluate((pid) => window.__toword.reviveSecret(pid), hostId);
-    await host.evaluate((w) => window.__toword.guess(w), secret);
-    await pA.waitForFunction((id) => window.__toword.state().tower.lives[id] === 2, aId, { polling: 100 });
+    const secret = await host.evaluate((pid) => window.__topple.reviveSecret(pid), hostId);
+    await host.evaluate((w) => window.__topple.guess(w), secret);
+    await pA.waitForFunction((id) => window.__topple.state().tower.lives[id] === 2, aId, { polling: 100 });
 
     for (const page of [host, pA, pB]) {
       await expect(page.locator('#tower-scene')).toBeVisible();
