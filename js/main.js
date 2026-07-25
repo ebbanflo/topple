@@ -148,6 +148,7 @@ function installDebug() {
     ui,
     // engine-side helpers (host page only)
     setScore: (pid, n) => S.engine && S.engine._debugSetScore(pid, n),
+    setStorey: (n) => S.engine && S.engine._debugSetStorey(n),
     setSettings: (patch) => S.engine && S.engine.setSettings(patch),
     engineState: () => S.engine && {
       started: S.engine.started,
@@ -180,11 +181,13 @@ function installDebug() {
         digNeed: S.mirror.digNeed(),
         offer: S.mirror.tower.offer
           ? { options: S.mirror.tower.offer.options.map((c) => ({ ...c })) } : null,
+        run: S.mirror.tower.run ? { ...S.mirror.tower.run } : null,
         rows: S.mirror.tower.rows.map((r) => ({ ...r })),
         buried: Object.fromEntries(Object.entries(S.mirror.tower.buried)
           .map(([k, v]) => [k, { cleared: v.cleared }])),
       },
       gameover: S.mirror.gameover && { ...S.mirror.gameover },
+      intermission: S.mirror.intermission && { ...S.mirror.intermission },
       input: S.mirror.input,
       inputLocked: S.mirror.inputLocked(),
       roomDead: S.mirror.roomDead,
@@ -201,6 +204,7 @@ function installDebug() {
     backspace: () => S.mirror.backspace(),
     buy: (item, target) => S.mirror.buy(item, target),
     pickDecree: (i) => S.mirror.pickDecree(i),
+    ready: () => S.mirror.ready(),
     quit: () => quitToMenu(),
   };
 }

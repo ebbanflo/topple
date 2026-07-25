@@ -523,6 +523,123 @@ test.describe('topple', () => {
     expect(new Set(openers).size).toBeGreaterThan(1);
   });
 
+  test('ASCENT: a storey quota opens an intermission, and the next storey demands more', async ({ context }) => {
+    test.setTimeout(90000);
+    const host = await openPage(context);
+    const code = await hostGame(host, 'FOREMAN', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.evaluate(() => window.__topple.setSettings({ mode: 'ascent' }));
+    const guest = await openPage(context);
+    await joinGame(guest, code, 'HOD');
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
+    const aId = await guest.evaluate(() => window.__topple.selfId);
+    await startGame(host, [host, guest]);
+    await waitTower(host); await waitTower(guest);
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+
+    const run0 = (await towerState(host)).run;
+    expect(run0.storey).toBe(1);
+    expect(run0.storeys).toBe(8);
+    expect(run0.quota).toBeGreaterThan(0);
+    expect(run0.storeyScore).toBe(0);
+    await expect(host.locator('#tower-height')).toContainText('STOREY 1/8');
+
+    // the guest loses a life first, so we can prove the intermission hands one back
+    await miss(guest, 'zzzzz');
+    expect((await towerState(host)).lives[aId]).toBe(2);
+
+    // climb until the quota falls
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 40);
+    for (const w of words) {
+      const r = (await towerState(host)).run;
+      if (r.phase !== 'climb') break;
+      if ((await usedWords(host)).includes(w)) continue;
+      await climb(host, w);
+    }
+    await host.waitForFunction(() => window.__topple.state().tower.run.phase === 'intermission',
+      null, { polling: 100 });
+
+    // the intermission reaches EVERY player, not just the host
+    for (const page of [host, guest]) {
+      await page.waitForSelector('#scr-inter:not(.hidden)');
+    }
+    const inter = (await state(host)).intermission;
+    expect(inter.storey).toBe(1);
+    expect(inter.storeyScore).toBeGreaterThanOrEqual(inter.quota);
+    expect(inter.earned).toBeGreaterThan(0);
+    expect(inter.mortar).toBe(inter.earned);
+    await expect(host.locator('#inter-title')).toContainText('STOREY 1 CLEARED');
+    // clearing a storey hands a heart back
+    expect((await towerState(host)).lives[aId]).toBe(3);
+    // and the tower is genuinely stopped: words do not land
+    const heightAtStop = (await towerState(host)).height;
+    await host.evaluate(() => window.__topple.guess('crane'));
+    await host.waitForTimeout(250);
+    expect((await towerState(host)).height).toBe(heightAtStop);
+    expect(await host.evaluate(() => window.__topple.state().inputLocked)).toBe(true);
+
+    // only the host calls time
+    await expect(guest.locator('#btn-next-storey')).toBeHidden();
+    await expect(guest.locator('#inter-wait')).toBeVisible();
+    await guest.evaluate(() => window.__topple.ready()); // ignored
+    await host.waitForTimeout(200);
+    expect((await towerState(host)).run.phase).toBe('intermission');
+
+    await host.click('#btn-next-storey');
+    for (const page of [host, guest]) {
+      await page.waitForFunction(() => window.__topple.state().tower.run.phase === 'climb',
+        null, { polling: 100 });
+      await page.waitForSelector('#scr-game:not(.hidden)');
+    }
+    const run1 = (await towerState(host)).run;
+    expect(run1.storey).toBe(2);
+    expect(run1.quota).toBeGreaterThan(run0.quota); // storey two asks for more
+    expect(run1.storeyScore).toBe(0);
+  });
+
+  test('ASCENT: clearing the last storey crowns the tower instead of dropping it', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    await hostGame(host, 'CAPSTONE', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.evaluate(() => window.__topple.setSettings({ mode: 'ascent' }));
+    await host.click('#btn-start');
+    await waitTower(host);
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+
+    // jump to the final storey and shrink its quota — this test is about the
+    // crown, not the curve (which is a playtest question)
+    await host.evaluate(() => {
+      window.__topple.setStorey(8);
+      window.__topple.engine.tower.run.quota = 1000;
+    });
+    expect((await towerState(host)).run.storey).toBe(8);
+
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 8);
+    for (const w of words) {
+      if ((await state(host)).over) break;
+      if ((await towerState(host)).run.phase !== 'climb') break;
+      await climb(host, w);
+    }
+    await host.waitForFunction(() => window.__topple.state().over, null, { polling: 100, timeout: 20000 });
+
+    const over = (await state(host)).gameover;
+    expect(over.won).toBe(true);
+    expect(over.reason).toBe('the tower stands');
+    expect(over.storey).toBe(8);
+    await host.waitForSelector('#scr-over:not(.hidden)');
+    await expect(host.locator('#over-title')).toContainText('CROWNED');
+    // a crowned tower is NOT demolished on the way to the podium
+    await expect(host.locator('#tower-scene')).not.toHaveClass(/collapsing/);
+  });
+
+  test('CLASSIC has no storeys at all', async ({ context }) => {
+    const host = await openPage(context);
+    await hostGame(host, 'ENDLESS', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.click('#btn-start');
+    await waitTower(host);
+    expect((await towerState(host)).run).toBeNull();
+    await expect(host.locator('#tower-height')).toContainText('HEIGHT');
+  });
+
   test('decree difficulty pools: all survivable over a long game, and every decree is clearable with RECOGNIZABLE words', () => {
     for (const difficulty of ['easy', 'medium', 'hard', 'ramp']) {
       const used = new Set();

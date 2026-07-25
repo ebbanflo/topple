@@ -37,6 +37,7 @@ export class Mirror {
       [EV.SCORES]: (d) => this.onScores(d),
       [EV.SHOP_ERR]: (d) => { if (d.to === selfId) { this.showToast(d.reason); this.fire('shoperr', d); } },
       [EV.DECREE_OFFER]: (d) => this.onDecreeOffer(d),
+      [EV.INTERMISSION]: (d) => this.onIntermission(d),
       [EV.TOWER]: (d) => this.onTower(d),
       [EV.TOWER_WORD]: (d) => this.onTowerWord(d),
       [EV.TOWER_MISS]: (d) => this.onTowerMiss(d),
@@ -115,6 +116,7 @@ export class Mirror {
     t.lives = d.lives;
     t.hungerAt = now() + d.hungerMs;
     t.digNeed = d.digNeed ?? t.digNeed ?? 3;
+    t.run = d.run ?? t.run ?? null;
     this.applyScores(d.scores);
     this.fire('tower', { ...d, fresh: hadStage == null });
   }
@@ -142,6 +144,7 @@ export class Mirror {
     t.height = d.height;
     t.combo = d.combo;
     t.stage = d.stage;
+    if (t.run && d.storeyScore != null) t.run.storeyScore = d.storeyScore;
     t.hungerAt = now() + t.hungerMs;
     const p = this.player(d.pid);
     if (p) p.score += d.points; // lean protocol: deltas, not snapshots
@@ -191,6 +194,24 @@ export class Mirror {
     }
     this.fire('dig', d);
   }
+
+  onIntermission(d) {
+    const t = this.tower;
+    if (!t) return;
+    if (t.run) {
+      t.run.phase = 'intermission';
+      t.run.mortar = d.mortar;
+      t.run.storeyScore = d.storeyScore;
+    }
+    if (d.lives) { t.lives = d.lives; this.syncBuried(); }
+    t.offer = null;
+    this.intermission = d;
+    this.fire('intermission', d);
+  }
+
+  ready() { this.net.emit(IN.READY, {}); }
+
+  myRun() { return (this.tower && this.tower.run) || null; }
 
   onTowerBonus(d) {
     const t = this.tower;
@@ -260,6 +281,7 @@ export class Mirror {
         hungerMs: s.tower.hungerMs, lives: { ...s.tower.lives },
         hungerAt: now() + s.tower.hungerMs,
         digNeed: s.tower.digNeed ?? 3,
+        run: s.tower.run || null,
         offer: s.tower.offer
           ? { options: s.tower.offer.options, until: now() + (this.settings?.draftMs ?? 9000) }
           : null,
@@ -276,6 +298,8 @@ export class Mirror {
   // Buried players are NOT locked out - digging is the whole point.
   inputLocked() {
     if (!this.started || this.over || !this.tower) return true;
+    const r = this.myRun();
+    if (r && r.phase !== 'climb') return true; // the intermission is a real stop
     return this.pendingTower > 0 && now() - this.pendingTower < 1500;
   }
 

@@ -15,6 +15,7 @@ export const IN = {
   BUY: 'buy',           // {item, target?}
   QUIT: 'quit',         // {} (sender leaves; host handles + mirrors)
   DECREE_PICK: 'pick',  // {index} choose one of the offered decrees
+  READY: 'ready',       // {} ASCENT: leave the intermission, start the next storey
   RESYNC: 'resyncreq',  // {} ask host for a full snapshot
 };
 
@@ -26,6 +27,7 @@ export const EV = {
   SCORES: 'scores',      // {scores, buyer?, item?}
   SHOP_ERR: 'shoperr',   // {to, reason}
   DECREE_OFFER: 'offer', // {stage, options:[constraint], ms} pick one, first pick wins
+  INTERMISSION: 'inter', // ASCENT: {storey, quota, storeyScore, mortar, earned, last}
   TOWER: 'twr',          // {stage, constraint, height, hungerMs, lives, scores, combo, pickedBy?}
   TOWER_WORD: 'twrword', // {pid, word, points, height, combo, stage}
   TOWER_MISS: 'twrmiss', // {pid, word, reason, lives, combo}
@@ -33,7 +35,7 @@ export const EV = {
   DIG: 'dig',            // {phase:'buried'|'clear'|'out', pid, cleared, need, word?, by?, lives?}
   TOWER_BONUS: 'twrbonus',   // {reason:'milestone'|'spelled', lives, height} - team-wide heart
   PLAYER_LEFT: 'left',   // {pid}
-  GAME_OVER: 'gameover', // {standings, winner, reason, height, stage}
+  GAME_OVER: 'gameover', // {standings, winner, reason, height, stage, won?, storey?}
   ROOM_DEAD: 'roomdead', // {} host is closing the room
   RESYNC: 'resync',      // {to, snapshot}
 };

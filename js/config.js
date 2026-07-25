@@ -82,8 +82,28 @@ export const DIFFICULTY_CHOICES = ['easy', 'medium', 'hard', 'ramp'];
 // from the UTC date, so everyone playing today climbs the same decrees in the
 // same order - which only means anything if the knobs are identical too, hence
 // DAILY_SETTINGS being forced over whatever the host had selected.
-export const MODE_CHOICES = ['classic', 'daily'];
+export const MODE_CHOICES = ['classic', 'ascent', 'daily'];
 export const DAILY_SETTINGS = { difficulty: 'ramp', rampWords: 5, hungerMs: TOWER.hungerMs };
+
+// ASCENT: the structured run. Each storey sets a score quota; clear it and the
+// tower holds while the team catches its breath, then the next storey demands
+// more. Clear the last one and the tower is crowned - the game's only win.
+//
+// The curve below is a STARTING POINT and expected to move: a word is worth
+// roughly 900-1,700 early on and several times that once stage and combo climb,
+// so the honest way to tune this is to play it. `?debug=1` exposes setStorey()
+// so nobody has to grind eight storeys to test the eighth.
+export const ASCENT = {
+  storeys: 8,
+  quotaBase: 8000,
+  quotaGrowth: 1.6,
+  clearLives: 1,      // a heart back for everyone at each intermission
+  mortarBase: 4,      // currency earned per storey, before bonuses
+};
+
+export function storeyQuota(n) {
+  return Math.round(ASCENT.quotaBase * (ASCENT.quotaGrowth ** (n - 1)) / 100) * 100;
+}
 
 export const DEFAULT_SETTINGS = {
   mode: 'classic',

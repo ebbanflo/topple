@@ -740,6 +740,13 @@ input, button { font-family: inherit; color: inherit; }
 .draft-gauge { font-size: .58rem; letter-spacing: .2em; color: var(--ink-3); }
 .draft-timer { font-size: .6rem; letter-spacing: .2em; color: var(--ink-2); text-align: center; margin: 0; }
 
+/* ---------- ASCENT intermission ---------- */
+.inter-figures { display: flex; gap: 1.4rem; justify-content: center; margin-top: .6rem; }
+.inter-fig { display: flex; flex-direction: column; align-items: center; gap: .15rem; }
+.inter-num { font-size: clamp(1.1rem, 6vw, 1.6rem); font-weight: 700; letter-spacing: .04em; }
+.inter-label { font-size: .55rem; letter-spacing: .24em; color: var(--ink-3); }
+.inter-earned { font-size: .72rem; letter-spacing: .18em; margin: .2rem 0 0; }
+
 /* ---------- game over ---------- */
 .over-title { margin: .4rem 0 0; font-size: clamp(1.8rem, 11vw, 3rem); font-weight: 700; letter-spacing: .12em; animation: glyph-set .45s cubic-bezier(.2, .9, .25, 1) both; }
 .over-sub { margin: 0; font-size: .72rem; letter-spacing: .1em; color: var(--ink-2); text-align: center; }

@@ -13,6 +13,14 @@ served straight off GitHub Pages, with Supabase Realtime carrying the room.
 
 **CLASSIC** — the endless game. Climb until everyone is buried.
 
+**ASCENT** — the structured run. Eight **storeys**, each demanding a score
+**quota**. Meet it and the tower holds while the team catches its breath —
+everyone gets a heart back, anyone buried is lifted out, and you bank **mortar**.
+Then the next storey asks for more. There is deliberately no second clock: the
+hunger bar is the pressure, and you fail a storey by getting buried, not by
+running out of turns. Clear the eighth and the tower is **crowned** — the only
+way to actually win.
+
 **DAILY** — the same tower for everybody, everywhere, all day. Decrees are dealt
 from a seed derived from the UTC date rather than from chance, and the settings
 are locked so the runs are actually comparable. Rolls over at UTC midnight, so a
@@ -107,6 +115,15 @@ between tests — and an entire run's decree sequence can be generated and
 compared straight from node. CLASSIC passes nothing and gets `Math.random`;
 DAILY passes a mulberry32 seeded from the UTC date. Only the host generates
 decrees, so the seed itself never crosses the wire.
+
+### Tuning ASCENT
+
+The quota curve in `js/config.js` (`storeyQuota`, driven by `ASCENT.quotaBase`
+and `ASCENT.quotaGrowth`) is a starting point and expected to move. A word is
+worth roughly 900–1,700 early on and several times that once stage and combo
+climb, so the honest way to tune it is to play it. `?debug=1` exposes
+`setStorey(n)` so the eighth storey can be tested without grinding the first
+seven.
 
 ### Infrastructure
 

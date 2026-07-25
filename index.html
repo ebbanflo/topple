@@ -59,6 +59,7 @@
         <span class="setting-label">MODE</span>
         <div class="seg" role="radiogroup" data-setting="mode">
           <button data-val="classic" class="seg-btn">CLASSIC</button>
+          <button data-val="ascent" class="seg-btn">ASCENT</button>
           <button data-val="daily" class="seg-btn">DAILY</button>
         </div>
       </div>
@@ -127,6 +128,21 @@
     <div id="keyboard" class="keyboard" aria-label="on-screen keyboard"></div>
   </section>
 
+  <!-- ============ INTERMISSION (ASCENT) ============ -->
+  <section id="scr-inter" class="screen hidden">
+    <div class="slug">INT. THE SCAFFOLD &mdash; LATER</div>
+    <h2 id="inter-title" class="over-title">STOREY CLEARED</h2>
+    <p id="inter-sub" class="over-sub"></p>
+    <div class="inter-figures">
+      <div class="inter-fig"><span id="inter-score" class="inter-num">0</span><span class="inter-label">SCORED</span></div>
+      <div class="inter-fig"><span id="inter-quota" class="inter-num">0</span><span class="inter-label">QUOTA</span></div>
+      <div class="inter-fig"><span id="inter-mortar" class="inter-num">0</span><span class="inter-label">MORTAR</span></div>
+    </div>
+    <p id="inter-earned" class="inter-earned"></p>
+    <button id="btn-next-storey" class="btn-big hidden">NEXT STOREY</button>
+    <p id="inter-wait" class="lobby-wait hidden">waiting for the host…</p>
+  </section>
+
   <!-- ============ GAME OVER ============ -->
   <section id="scr-over" class="screen hidden">
     <div class="slug">EXT. THE RUBBLE &mdash; DAY</div>
@@ -174,6 +190,13 @@
       <h3>SCORING</h3>
       <p>Each floor scores base &times; letter values &times; <b>stage</b>, inflated by your
       <b>combo</b> (every consecutive good word, team-wide). Numbers are meant to be absurd.</p>
+      <h3>ASCENT</h3>
+      <p>The structured run. Eight <b>storeys</b>, each demanding a score <b>quota</b>. Meet it and
+      the tower holds while you catch your breath &mdash; everyone gets a heart back, anyone buried
+      is lifted out, and you bank <b>mortar</b>. Then the next storey asks for more. There's no
+      second clock: the hunger bar is the pressure, and you fail a storey by getting buried, not by
+      running out of turns. Clear the eighth and the tower is <b>crowned</b> &mdash; the only way to
+      actually win.</p>
       <h3>DAILY</h3>
       <p>Same tower for everybody, everywhere, all day. The decrees are dealt from the date rather
       than from chance, and the settings are locked so the runs are actually comparable &mdash;

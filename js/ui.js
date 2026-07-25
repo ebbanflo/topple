@@ -11,6 +11,10 @@ const $ = (id) => document.getElementById(id);
 const KEY_ROWS = ['qwertyuiop', 'asdfghjkl', '⏎zxcvbnm⌫'];
 const COLLAPSE_MS = 2100; // let the tower actually fall before the podium
 
+// The substats band is fixed-width and fixed-height; quotas run to six figures,
+// so they get abbreviated rather than allowed to wrap the layout.
+const compact = (n) => (n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}K` : n.toLocaleString('en-US'));
+
 export class UI {
   // actions: {host(), join(code), start(), setSettings(patch), playAgain(),
   //           quitToMenu(), shareLink(), roomCode()}
@@ -152,6 +156,7 @@ export class UI {
     $('btn-pause').onclick = () => this.setPaused(true);
     $('btn-resume').onclick = () => this.setPaused(false);
     $('btn-picker-cancel').onclick = () => this.closePicker();
+    $('btn-next-storey').onclick = () => { this.mirror.ready(); sfx.ret(); };
 
     document.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -228,6 +233,7 @@ export class UI {
         sfx.join();
         break;
       case 'offer': this.showDraft(); break;
+      case 'intermission': this.onIntermission(d); break;
       case 'tower': this.onDecree(d); break;
       case 'towerword': this.onTowerWord(d); break;
       case 'towermiss': this.onTowerMiss(d); break;
@@ -327,13 +333,20 @@ export class UI {
     if (!m.tower) return;
     this.closeDraft();
     this.show('scr-game');
+    if (d && d.storeyStart) {
+      this.tower3d.reset();
+      this.showToast(`STOREY ${d.storeyStart} — QUOTA ${compact(m.tower.run.quota)}`);
+      sfx.stage();
+    }
     $('decree').textContent = describeConstraint(m.tower.constraint);
     $('decree').classList.remove('swap');
     void $('decree').offsetWidth;
     $('decree').classList.add('swap');
-    $('hdr-slug').textContent = m.daily
-      ? `INT. THE TOWER #${m.daily.n} — STAGE ${m.tower.stage}`
-      : `INT. THE TOWER — STAGE ${m.tower.stage}`;
+    $('hdr-slug').textContent = m.tower.run
+      ? `INT. THE TOWER — STOREY ${m.tower.run.storey} OF ${m.tower.run.storeys}`
+      : m.daily
+        ? `INT. THE TOWER #${m.daily.n} — STAGE ${m.tower.stage}`
+        : `INT. THE TOWER — STAGE ${m.tower.stage}`;
     this.renderTowerHud();
     this.renderTowerInput();
     this.renderStrip();
@@ -357,8 +370,11 @@ export class UI {
     scoreEl.classList.remove('bump');
     void scoreEl.offsetWidth;
     scoreEl.classList.add('bump');
-    $('tower-height').textContent = `HEIGHT ${t.height}`;
-    $('tower-stage').textContent = `STAGE ${t.stage}`;
+    const run = t.run;
+    $('tower-height').textContent = run ? `STOREY ${run.storey}/${run.storeys}` : `HEIGHT ${t.height}`;
+    $('tower-stage').textContent = run
+      ? `${compact(run.storeyScore)}/${compact(run.quota)}`
+      : `STAGE ${t.stage}`;
     $('tower-combo').textContent = t.combo > 1 ? `×${t.combo} COMBO` : '';
   }
 
@@ -496,6 +512,24 @@ export class UI {
     this.renderShop();
   }
 
+  // ---------- ASCENT intermission ----------
+  onIntermission(d) {
+    const m = this.mirror;
+    this.closeDraft();
+    this.show('scr-inter');
+    $('inter-title').textContent = d.last ? 'THE TOWER STANDS' : `STOREY ${d.storey} CLEARED`;
+    $('inter-sub').textContent = d.last
+      ? 'nothing left to build'
+      : `everyone takes a heart back — storey ${d.storey + 1} wants more`;
+    $('inter-score').textContent = d.storeyScore.toLocaleString('en-US');
+    $('inter-quota').textContent = d.quota.toLocaleString('en-US');
+    $('inter-mortar').textContent = d.mortar.toLocaleString('en-US');
+    $('inter-earned').textContent = `+${d.earned} MORTAR EARNED`;
+    $('btn-next-storey').classList.toggle('hidden', !m.isHost() || d.last);
+    $('inter-wait').classList.toggle('hidden', m.isHost() || d.last);
+    sfx.bless();
+  }
+
   // ---------- decree draft ----------
   showDraft() {
     const m = this.mirror;
@@ -598,10 +632,16 @@ export class UI {
   }
 
   onGameOver(d) {
-    // The fall is the payoff: play it in place, then cut to the rubble.
     this.setPaused(false);
     this.closePicker();
     this.closeDraft();
+    // A crowned tower must NOT be demolished on the way to the podium - the
+    // whole point of winning is that it is still standing.
+    if (d.won) {
+      sfx.win();
+      this.renderGameOver(d);
+      return;
+    }
     this.tower3d.collapse();
     sfx.collapse();
     $('decree').textContent = 'THE TOWER FALLS';
@@ -612,9 +652,15 @@ export class UI {
   renderGameOver(d) {
     const m = this.mirror;
     this.show('scr-over');
-    $('over-title').textContent = `HEIGHT ${d.height ?? 0}`;
-    $('over-sub').textContent = `the tower fell at stage ${d.stage ?? 1} — ${(d.standings || [])
-      .reduce((s, p) => s + p.score, 0).toLocaleString('en-US')} points banked`;
+    const banked = (d.standings || []).reduce((s, p) => s + p.score, 0).toLocaleString('en-US');
+    document.querySelector('#scr-over .slug').textContent = d.won
+      ? 'EXT. THE SPIRE — DAWN' : 'EXT. THE RUBBLE — DAY';
+    $('over-title').textContent = d.won ? 'CROWNED' : `HEIGHT ${d.height ?? 0}`;
+    $('over-sub').textContent = d.won
+      ? `all ${d.storey} storeys — height ${d.height}, ${banked} points banked`
+      : d.storey
+        ? `fell on storey ${d.storey} at height ${d.height} — ${banked} points banked`
+        : `the tower fell at stage ${d.stage ?? 1} — ${banked} points banked`;
     const ol = $('standings');
     ol.replaceChildren();
     for (const p of d.standings || []) {
@@ -645,6 +691,7 @@ export class UI {
       this.renderTowerInput();
       this.renderShop();
       if (m.myOffer()) this.showDraft(); else this.closeDraft();
+      if (m.myRun()?.phase === 'intermission' && m.intermission) this.onIntermission(m.intermission);
     }
   }
 
@@ -655,6 +702,7 @@ export class UI {
     this.tower3d.setYaw(Math.sin(now() / 4600) * 8);
     if (!m || m.over || !m.tower) return;
     const t = m.tower;
+    if (t.run && t.run.phase !== 'climb') return; // clock stopped between storeys
     const offer = m.myOffer();
     if (offer) {
       const secs = Math.max(0, Math.ceil((offer.until - now()) / 1000));

@@ -5,7 +5,7 @@
 
 import {
   MAX_PLAYERS, MIN_PLAYERS, WORD_LEN, DECREE_OPTIONS, MODE_CHOICES, DAILY_SETTINGS,
-  SHOP, DEFAULT_SETTINGS, PLAYER_COLORS, LEAVE_GRACE_MS, TOWER,
+  SHOP, DEFAULT_SETTINGS, PLAYER_COLORS, LEAVE_GRACE_MS, TOWER, ASCENT, storeyQuota,
 } from './config.js';
 import { EV, IN } from './protocol.js';
 import { isValidGuess } from './words.js';
@@ -35,6 +35,7 @@ export class Engine {
     net.on(IN.GUESS, (d, from) => this.onTowerGuess(d, from));
     net.on(IN.BUY, (d, from) => this.onBuy(d, from));
     net.on(IN.DECREE_PICK, (d, from) => this.onDecreePick(d, from));
+    net.on(IN.READY, (_d, from) => this.onReady(from));
     net.on(IN.QUIT, (_d, from) => this.onLeave(from, 'quit'));
     net.on(IN.RESYNC, (_d, from) => this.sendResync(from));
 
@@ -182,6 +183,11 @@ export class Engine {
       rng: this.settings.mode === 'daily'
         ? mulberry32(hashSeed(dailyKey()))
         : Math.random,
+      // ASCENT only: the run's storey structure. null in CLASSIC/DAILY, which
+      // stay endless, so every branch below is a single `t.run &&` away.
+      run: this.settings.mode === 'ascent'
+        ? { storey: 1, quota: storeyQuota(1), storeyScore: 0, mortar: 0, phase: 'climb' }
+        : null,
     };
     this.tower.constraint = genConstraint(
       1, this.tower.used, this.tower.difficulty, this.tower.rampWords, null, this.tower.rng);
@@ -194,7 +200,84 @@ export class Engine {
     this.net.emit(EV.TOWER, {
       stage: t.stage, constraint: t.constraint, height: t.height,
       hungerMs: t.hungerMs, lives: { ...t.lives }, scores: this.scoreMap(),
-      combo: t.combo, digNeed: TOWER.digWords, ...extra,
+      combo: t.combo, digNeed: TOWER.digWords, run: this.runInfo(), ...extra,
+    });
+  }
+
+  runInfo() {
+    const r = this.tower && this.tower.run;
+    return r ? {
+      storey: r.storey, quota: r.quota, storeyScore: r.storeyScore,
+      mortar: r.mortar, phase: r.phase, storeys: ASCENT.storeys,
+    } : null;
+  }
+
+  // ---------- ASCENT: storeys ----------
+  // A storey ends when its quota is met, never on a separate timer. The hunger
+  // clock is already the pressure; a second failure clock would just punish the
+  // same mistake twice.
+  completeStorey() {
+    const t = this.tower;
+    const r = t.run;
+    r.phase = 'intermission';
+    clearTimeout(this.timers.hunger);
+    clearTimeout(this.timers.draft);
+    t.offer = null;
+
+    // clearing a storey buys everyone a breath: a heart back, and anyone
+    // buried is lifted out by it
+    for (const p of this.activePlayers()) {
+      t.lives[p.id] = Math.min(TOWER.maxLives, (t.lives[p.id] ?? 0) + ASCENT.clearLives);
+    }
+    this.syncBuried();
+
+    // overshooting the quota pays, and so does finishing with hearts in hand
+    const over = Math.max(0, r.storeyScore - r.quota);
+    const lives = this.activePlayers().reduce((n, p) => n + (t.lives[p.id] ?? 0), 0);
+    const earned = ASCENT.mortarBase + Math.floor((over / r.quota) * 4) + lives;
+    r.mortar += earned;
+
+    const last = r.storey >= ASCENT.storeys;
+    this.net.emit(EV.INTERMISSION, {
+      storey: r.storey, quota: r.quota, storeyScore: r.storeyScore,
+      mortar: r.mortar, earned, lives: { ...t.lives }, last,
+    });
+    if (last) this.timers.next = setTimeout(() => this.crown(), 1200);
+  }
+
+  onReady(from) {
+    const t = this.tower;
+    if (!t || !t.run || t.run.phase !== 'intermission' || this.over) return;
+    if (from !== this.hostId) return; // the host calls time on the intermission
+    this.nextStorey();
+  }
+
+  nextStorey() {
+    const t = this.tower;
+    const r = t.run;
+    r.storey += 1;
+    r.quota = storeyQuota(r.storey);
+    r.storeyScore = 0;
+    r.phase = 'climb';
+    t.constraint = genConstraint(
+      t.stage, t.used, t.difficulty, t.rampWords, t.constraint, t.rng);
+    this.broadcastTower({ storeyStart: r.storey });
+    this.armHunger();
+  }
+
+  // The only win in the game.
+  crown() {
+    if (this.over) return;
+    this.over = true;
+    this.clearTimers();
+    const t = this.tower;
+    const standings = [...this.players].sort((a, b) => b.score - a.score);
+    this.net.emit(EV.GAME_OVER, {
+      reason: 'the tower stands',
+      won: true,
+      winner: standings[0] ? standings[0].id : null,
+      height: t.height, stage: t.stage, storey: t.run.storey,
+      standings: standings.map((p) => ({ id: p.id, name: p.name, color: p.color, score: p.score, alive: p.alive })),
     });
   }
 
@@ -338,6 +421,7 @@ export class Engine {
     if (!t || this.over) return;
     const p = this.player(from);
     if (!p || !p.connected) return;
+    if (t.run && t.run.phase !== 'climb') return; // the intermission is a real stop
     const word = this.unwrapWord(d.x);
 
     // Buried players are still playing - their words dig, they don't build.
@@ -356,8 +440,10 @@ export class Engine {
     p.score += points;
     t.rows.push({ pid: from, word, points });
     if (t.rows.length > 60) t.rows.shift();
+    if (t.run) t.run.storeyScore += points;
     this.net.emit(EV.TOWER_WORD, {
       pid: from, word, points, height: t.height, combo: t.combo, stage: t.stage,
+      storeyScore: t.run ? t.run.storeyScore : undefined,
     });
     this.armHunger();
 
@@ -370,6 +456,10 @@ export class Engine {
 
     // A draft already in flight holds the stage where it is - the team can keep
     // climbing under the old decree while they decide.
+    // Quota first: clearing a storey supersedes any decree change it collides
+    // with, and the intermission would cancel a draft anyway.
+    if (t.run && t.run.storeyScore >= t.run.quota) { this.completeStorey(); return; }
+
     if (t.wordsInStage >= t.rampWords && !t.offer) {
       t.stage += 1;
       t.wordsInStage = 0;
@@ -455,9 +545,11 @@ export class Engine {
     const standings = [...this.players].sort((a, b) => b.score - a.score);
     this.net.emit(EV.GAME_OVER, {
       reason: 'the tower fell',
+      won: false,
       winner: standings[0] ? standings[0].id : null,
       height: t.height,
       stage: t.stage,
+      storey: t.run ? t.run.storey : null,
       standings: standings.map((p) => ({ id: p.id, name: p.name, color: p.color, score: p.score, alive: p.alive })),
     });
   }
@@ -555,6 +647,7 @@ export class Engine {
         rows: this.tower.rows.slice(-40),
         digNeed: TOWER.digWords,
         offer: this.tower.offer ? { options: this.tower.offer.options } : null,
+        run: this.runInfo(),
         buried: Object.fromEntries(Object.entries(this.tower.buried)
           .map(([pid, d]) => [pid, { cleared: d.cleared }])),
       } : null,
@@ -576,6 +669,19 @@ export class Engine {
   }
 
   // ---------- debug hooks (?debug=1 only; used by the E2E suite) ----------
+  // Jump the run forward so the eighth storey can be tested without playing
+  // the first seven. ?debug=1 only.
+  _debugSetStorey(n) {
+    const t = this.tower;
+    if (!t || !t.run) return;
+    t.run.storey = Math.max(1, Math.min(ASCENT.storeys, Number(n) || 1));
+    t.run.quota = storeyQuota(t.run.storey);
+    t.run.storeyScore = 0;
+    t.run.phase = 'climb';
+    this.broadcastTower();
+    this.armHunger();
+  }
+
   _debugSetScore(pid, score) {
     const p = this.player(pid);
     if (p) p.score = score;
