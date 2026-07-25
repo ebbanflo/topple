@@ -6,6 +6,7 @@
 import { GUESSES } from '../data/guesses.js';
 import { SOLUTIONS } from '../data/solutions.js';
 import { TOWER, LETTER_VALUES, WORD_LEN } from './config.js';
+import { heldRelics } from './relics.js';
 
 const VOWELS = ['a', 'e', 'i', 'o', 'u'];
 const COMMON = 'etaoinshrdlcumwfgypb'; // top ~20 by in-dictionary frequency
@@ -192,9 +193,44 @@ export function describeConstraint(c) {
   return parts.join(' · ') || 'ANY WORD';
 }
 
-// RPG numbers: big, stage-multiplied, combo-inflated.
-export function wordPoints(word, stage, combo) {
+// RPG numbers: big, stage-multiplied, combo-inflated - and, in ASCENT, bent by
+// whatever relics the placing player holds.
+//
+// Two halves, which is what the HUD shows and what relics attach to:
+//   STONE  the word     base + letter values, then relic stone / stoneMul
+//   MULT   the run      stage x combo, then relic mult (+) and xmult (x)
+//
+// ONE implementation, deliberately: an earlier draft had a separate relic-aware
+// copy of this formula, and the two disagreed by ten points at stage 3 combo 9
+// purely because floating-point multiplication is not associative. wordPoints()
+// is now a call into this with an empty relic list, so that class of drift is
+// impossible rather than merely unlikely.
+export function scoreBreakdown(word, ctx = {}) {
+  const held = heldRelics(ctx.relics);
+  const stage = ctx.stage ?? 1;
+  const combo = ctx.combo ?? 0;
+
   const letters = [...word].reduce((s, ch) => s + (LETTER_VALUES[ch] || 1), 0);
-  const raw = (TOWER.base + letters * TOWER.perLetterValue) * stage * (1 + TOWER.comboPct * combo);
-  return Math.round(raw / 10) * 10;
+  let stone = TOWER.base + letters * TOWER.perLetterValue;
+  for (const r of held) if (r.stone) stone += r.stone(word, ctx) || 0;
+  for (const r of held) if (r.stoneMul) stone *= r.stoneMul(word, ctx) ?? 1;
+
+  let mult = 1 + TOWER.comboPct * combo;
+  for (const r of held) if (r.mult) mult += (r.mult(word, ctx) || 0) / stage;
+  for (const r of held) if (r.xmult) mult *= r.xmult(word, ctx) ?? 1;
+
+  // grouped exactly as the original formula was, so the no-relic case is
+  // bit-for-bit what CLASSIC has always paid
+  const raw = stone * stage * mult;
+  return {
+    stone: Math.round(stone),
+    mult: Math.round(stage * mult * 100) / 100,
+    points: Math.round(raw / 10) * 10,
+  };
+}
+
+export function scoreWord(word, ctx = {}) { return scoreBreakdown(word, ctx).points; }
+
+export function wordPoints(word, stage, combo) {
+  return scoreBreakdown(word, { stage, combo }).points;
 }

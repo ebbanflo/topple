@@ -16,6 +16,8 @@ export const IN = {
   QUIT: 'quit',         // {} (sender leaves; host handles + mirrors)
   DECREE_PICK: 'pick',  // {index} choose one of the offered decrees
   READY: 'ready',       // {} ASCENT: leave the intermission, start the next storey
+  RELIC_PICK: 'relic',  // {id} ASCENT: buy one of your offered relics
+  REROLL: 'reroll',     // {} ASCENT: pay to redeal your own three
   RESYNC: 'resyncreq',  // {} ask host for a full snapshot
 };
 
@@ -27,7 +29,8 @@ export const EV = {
   SCORES: 'scores',      // {scores, buyer?, item?}
   SHOP_ERR: 'shoperr',   // {to, reason}
   DECREE_OFFER: 'offer', // {stage, options:[constraint], ms} pick one, first pick wins
-  INTERMISSION: 'inter', // ASCENT: {storey, quota, storeyScore, mortar, earned, last}
+  INTERMISSION: 'inter', // ASCENT: {storey, quota, storeyScore, mortar, earned, last, offers, relics}
+  RELICS: 'relics',      // ASCENT: {relics:{pid:[id]}, mortar, offers:{pid:[id]}, bought?, by?}
   TOWER: 'twr',          // {stage, constraint, height, hungerMs, lives, scores, combo, pickedBy?}
   TOWER_WORD: 'twrword', // {pid, word, points, height, combo, stage}
   TOWER_MISS: 'twrmiss', // {pid, word, reason, lives, combo}

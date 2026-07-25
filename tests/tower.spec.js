@@ -9,6 +9,7 @@ import {
   openPage, hostGame, joinGame, startGame, state, setScore, FAST,
   towerState, usedWords, waitTower, climb, miss,
 } from './helpers.js';
+import { RELICS } from '../js/relics.js';
 
 const STYLE_CSS_PATH = fileURLToPath(new URL('../css/style.css', import.meta.url));
 
@@ -638,6 +639,102 @@ test.describe('topple', () => {
     await waitTower(host);
     expect((await towerState(host)).run).toBeNull();
     await expect(host.locator('#tower-height')).toContainText('HEIGHT');
+  });
+
+  test('ASCENT shop: buying a relic costs mortar and measurably changes scoring', async ({ context }) => {
+    test.setTimeout(90000);
+    const host = await openPage(context);
+    await hostGame(host, 'PATRON', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.evaluate(() => window.__topple.setSettings({ mode: 'ascent' }));
+    await host.click('#btn-start');
+    await waitTower(host);
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+
+    // clear storey one to reach the table
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 40);
+    for (const w of words) {
+      if ((await towerState(host)).run.phase !== 'climb') break;
+      if ((await usedWords(host)).includes(w)) continue;
+      await climb(host, w);
+    }
+    await host.waitForSelector('#scr-inter:not(.hidden)');
+    await expect(host.locator('#shop-box')).toBeVisible();
+    await expect(host.locator('.relic-opt')).toHaveCount(3);
+
+    // force a known, affordable relic into the offer so the assertion is exact
+    await host.evaluate(() => {
+      const r = window.__topple.engine.tower.run;
+      r.mortar = 40;
+      r.offers[window.__topple.selfId] = ['vowel_tithe', 'greed', 'keystone'];
+      window.__topple.engine.broadcastRelics();
+    });
+    await host.waitForFunction(() => window.__topple.state().tower.run.mortar === 40, null, { polling: 50 });
+
+    await host.click('[data-testid="relic-vowel_tithe"]');
+    await host.waitForFunction(() => window.__topple.state().tower.run
+      .relics[window.__topple.selfId].includes('vowel_tithe'), null, { polling: 50 });
+    // the price came out of the shared pool, and it left the shelf
+    expect((await towerState(host)).run.mortar).toBe(40 - RELICS.vowel_tithe.price);
+    await expect(host.locator('[data-testid="relic-vowel_tithe"]')).toHaveCount(0);
+    // buying it twice is impossible
+    await host.evaluate(() => window.__topple.mirror.pickRelic('vowel_tithe'));
+    await host.waitForTimeout(200);
+    expect((await towerState(host)).run.relics[await host.evaluate(() => window.__topple.selfId)])
+      .toEqual(['vowel_tithe']);
+
+    // a reroll costs, and redeals
+    const before = (await towerState(host)).run.mortar;
+    await host.click('#btn-reroll');
+    await host.waitForFunction((n) => window.__topple.state().tower.run.mortar === n - 2,
+      before, { polling: 50 });
+
+    // back to the tower - and the relic is doing arithmetic
+    await host.click('#btn-next-storey');
+    await host.waitForFunction(() => window.__topple.state().tower.run.phase === 'climb',
+      null, { polling: 50 });
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+    await expect(host.locator('#status-line')).toContainText('VOWEL TITHE');
+
+    const t = await towerState(host);
+    const fresh = words.find((w) => !t.rows.map((r) => r.word).includes(w) && /[aeiou]/.test(w));
+    await climb(host, fresh);
+    const placed = (await towerState(host)).rows.slice(-1)[0];
+    const vowels = [...fresh].filter((c) => 'aeiou'.includes(c)).length;
+    // VOWEL TITHE is +40 stone a vowel, and stone is multiplied by mult
+    expect(placed.points).toBeGreaterThan(wordPoints(fresh, t.stage, t.combo + 1));
+    expect(vowels).toBeGreaterThan(0);
+  });
+
+  test('ASCENT relics override rules: SCAFFOLD eats a miss, KEYSTONE reuses a word', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    await hostGame(host, 'RIGGER', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.evaluate(() => window.__topple.setSettings({ mode: 'ascent' }));
+    await host.click('#btn-start');
+    await waitTower(host);
+    const hostId = await host.evaluate(() => window.__topple.selfId);
+    await host.evaluate(() => {
+      window.__topple.engine.tower.constraint = {};
+      window.__topple.engine.tower.run.relics[window.__topple.selfId] = ['scaffold', 'keystone'];
+      window.__topple.engine.broadcastTower();
+    });
+
+    // SCAFFOLD: the first miss of the storey costs nothing...
+    const lives0 = (await towerState(host)).lives[hostId];
+    await host.evaluate(() => window.__topple.guess('zzzzz'));
+    await host.waitForTimeout(300);
+    expect((await towerState(host)).lives[hostId]).toBe(lives0);
+    // ...and only the first
+    await miss(host, 'qqqqq');
+    expect((await towerState(host)).lives[hostId]).toBe(lives0 - 1);
+
+    // KEYSTONE: a word still standing can be played again
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 3);
+    await climb(host, words[0]);
+    const h = (await towerState(host)).height;
+    await climb(host, words[0]); // same word, still on screen
+    expect((await towerState(host)).height).toBe(h + 1);
+    expect((await towerState(host)).lives[hostId]).toBe(lives0 - 1); // no penalty
   });
 
   test('decree difficulty pools: all survivable over a long game, and every decree is clearable with RECOGNIZABLE words', () => {

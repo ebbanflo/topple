@@ -747,6 +747,22 @@ input, button { font-family: inherit; color: inherit; }
 .inter-label { font-size: .55rem; letter-spacing: .24em; color: var(--ink-3); }
 .inter-earned { font-size: .72rem; letter-spacing: .18em; margin: .2rem 0 0; }
 
+/* ---------- the Architect's Table ---------- */
+.shop-box { width: 100%; display: flex; flex-direction: column; gap: .5rem; margin-top: .4rem; }
+.shop-head { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
+.shop-title { font-size: .6rem; letter-spacing: .26em; color: var(--ink-3); }
+.relic-offers { display: flex; flex-direction: column; gap: .4rem; }
+.relic-opt { border-left-width: 4px; }
+.relic-opt:disabled { opacity: .32; cursor: default; }
+.relic-opt .draft-gauge { text-transform: none; letter-spacing: .04em; line-height: 1.4; }
+.r-common { border-left-color: var(--ink-3); }
+.r-uncommon { border-left-color: var(--ink-2); }
+.r-rare { border-left-color: var(--ink); }
+.relic-held, .relic-team {
+  font-size: .58rem; letter-spacing: .1em; color: var(--ink-2); margin: 0; line-height: 1.5;
+}
+.relic-team { color: var(--ink-3); }
+
 /* ---------- game over ---------- */
 .over-title { margin: .4rem 0 0; font-size: clamp(1.8rem, 11vw, 3rem); font-weight: 700; letter-spacing: .12em; animation: glyph-set .45s cubic-bezier(.2, .9, .25, 1) both; }
 .over-sub { margin: 0; font-size: .72rem; letter-spacing: .1em; color: var(--ink-2); text-align: center; }

@@ -3,6 +3,7 @@
 
 import { WORD_LEN, SHOP, DEFAULT_SETTINGS, STORE } from './config.js';
 import { describeConstraint, countRecognizable } from './decree.js';
+import { RELICS, MAX_RELICS, REROLL_COST } from './relics.js';
 import { el, now } from './util.js';
 import { sfx, soundEnabled, setSound } from './audio.js';
 import { Tower3D } from './tower3d.js';
@@ -157,6 +158,7 @@ export class UI {
     $('btn-resume').onclick = () => this.setPaused(false);
     $('btn-picker-cancel').onclick = () => this.closePicker();
     $('btn-next-storey').onclick = () => { this.mirror.ready(); sfx.ret(); };
+    $('btn-reroll').onclick = () => this.mirror.reroll();
 
     document.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -234,7 +236,11 @@ export class UI {
         break;
       case 'offer': this.showDraft(); break;
       case 'intermission': this.onIntermission(d); break;
-      case 'tower': this.onDecree(d); break;
+      case 'relics': this.renderShop2(d); break;
+      case 'tower':
+        if (d.insured) { this.showToast('INSURANCE — the tower holds at one floor'); sfx.bless(); }
+        this.onDecree(d);
+        break;
       case 'towerword': this.onTowerWord(d); break;
       case 'towermiss': this.onTowerMiss(d); break;
       case 'towerhunger':
@@ -333,6 +339,7 @@ export class UI {
     if (!m.tower) return;
     this.closeDraft();
     this.show('scr-game');
+    if (d && d.insured) this.tower3d.sync(m.tower.rows, (pid) => this.colorFor(pid));
     if (d && d.storeyStart) {
       this.tower3d.reset();
       this.showToast(`STOREY ${d.storeyStart} — QUOTA ${compact(m.tower.run.quota)}`);
@@ -413,6 +420,14 @@ export class UI {
       el$.classList.remove('inactive', 'buried');
       return;
     }
+    // Otherwise the band shows your build. It is already reserved space, so
+    // relics cost the layout nothing.
+    const held = m.myRelics();
+    if (held.length) {
+      el$.textContent = `✦ ${held.map((id) => RELICS[id]?.name).filter(Boolean).join(' · ')}`;
+      el$.classList.remove('inactive', 'buried');
+      return;
+    }
     el$.classList.add('inactive');
     el$.classList.remove('buried');
   }
@@ -446,6 +461,8 @@ export class UI {
   }
 
   onTowerMiss(d) {
+    if (d.spared) this.showToast(`SCAFFOLD held — ${d.word.toUpperCase()} cost nothing`);
+    if (d.forced) this.showToast(`BLOOD MORTAR — ${d.word.toUpperCase()} built, a life spent`);
     this.renderTowerHud();
     this.renderStrip();
     this.renderShop();
@@ -527,7 +544,51 @@ export class UI {
     $('inter-earned').textContent = `+${d.earned} MORTAR EARNED`;
     $('btn-next-storey').classList.toggle('hidden', !m.isHost() || d.last);
     $('inter-wait').classList.toggle('hidden', m.isHost() || d.last);
+    $('shop-box').classList.toggle('hidden', !!d.last);
+    if (!d.last) this.renderShop2();
     sfx.bless();
+  }
+
+  // The Architect's Table. Each player sees their OWN three; the mortar paying
+  // for them is the team's, which is the decision the room actually has.
+  renderShop2(evt) {
+    const m = this.mirror;
+    const run = m.myRun();
+    if (!run) return;
+    const mine = m.myRelics();
+    const shop = m.myShop();
+    $('inter-mortar').textContent = run.mortar.toLocaleString('en-US');
+    if (evt && evt.bought && evt.by === m.selfId) sfx.buy();
+    else if (evt && evt.rerolled === m.selfId) sfx.ret();
+
+    const box = $('relic-offers');
+    box.replaceChildren();
+    const full = mine.length >= MAX_RELICS;
+    for (const id of shop) {
+      const r = RELICS[id];
+      if (!r) continue;
+      const tooDear = run.mortar < r.price;
+      box.append(el('button', {
+        class: `draft-opt relic-opt r-${r.rarity}`,
+        'data-testid': `relic-${id}`,
+        disabled: (tooDear || full) ? 'disabled' : undefined,
+        onclick: () => m.pickRelic(id),
+      },
+      el('span', { class: 'draft-rule', text: `${r.name} · ${r.price}` }),
+      el('span', { class: 'draft-gauge', text: r.desc })));
+    }
+    if (shop.length === 0) {
+      box.append(el('p', { class: 'draft-gauge', text: 'nothing left to sell you' }));
+    }
+    $('btn-reroll').textContent = `REROLL · ${REROLL_COST}`;
+    $('btn-reroll').disabled = run.mortar < REROLL_COST;
+    $('relic-held').textContent = mine.length
+      ? `YOURS (${mine.length}/${MAX_RELICS}): ${mine.map((id) => RELICS[id]?.name).filter(Boolean).join(' · ')}`
+      : `YOURS (0/${MAX_RELICS}): none yet`;
+    const others = m.players
+      .filter((p) => p.id !== m.selfId && (run.relics[p.id] || []).length)
+      .map((p) => `${p.name}: ${(run.relics[p.id] || []).map((id) => RELICS[id]?.name).filter(Boolean).join(', ')}`);
+    $('relic-team').textContent = others.join('  |  ');
   }
 
   // ---------- decree draft ----------

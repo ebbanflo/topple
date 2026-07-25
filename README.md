@@ -21,6 +21,14 @@ hunger bar is the pressure, and you fail a storey by getting buried, not by
 running out of turns. Clear the eighth and the tower is **crowned** — the only
 way to actually win.
 
+At each intermission every player is dealt **three relics of their own**, bought
+from the team's shared **mortar** — so the room has to decide whose build is
+worth funding. Five each, for the whole run. Some are plain numbers; the
+interesting ones are trades: **GREED** multiplies your score and starves the
+tower ten seconds sooner, **PATIENCE** does the reverse, **KEYSTONE** lets you
+reuse words still standing, **BLOOD MORTAR** builds a decree-breaking word
+anyway and takes a life for it, **INSURANCE** catches the first collapse.
+
 **DAILY** — the same tower for everybody, everywhere, all day. Decrees are dealt
 from a seed derived from the UTC date rather than from chance, and the settings
 are locked so the runs are actually comparable. Rolls over at UTC midnight, so a
@@ -75,6 +83,7 @@ Host-authoritative, with a thin mirror on every client.
 | `js/transport.js` | Swappable transport: Supabase Realtime broadcast + presence, or `BroadcastChannel` for tests (`?t=local`). |
 | `js/decree.js` | Decree generation, matching and scoring. Pure functions over the dictionary — used by both the engine and the test suite. Takes its randomness as an argument, so it holds no RNG state. |
 | `js/rng.js` | mulberry32 plus a string hash. Same seed, same tower, on every device. |
+| `js/relics.js` | The relic catalogue: a declarative registry of pure functions over a context object, plus the rule-flag and dealing helpers. No engine imports, no state. |
 | `js/tower3d.js` | The tower renderer. Pure CSS 3D; deliberately swappable (`sync / push / miss / stress / bless / collapse / reset`). |
 | `js/ui.js` | Everything else on screen. Renders exclusively from the mirror. |
 | `js/words.js` | The dictionary gate, and nothing else. `data/solutions.js` is used only by `decree.js`, for the recognizability floor that keeps generated decrees humane. |
@@ -116,6 +125,19 @@ compared straight from node. CLASSIC passes nothing and gets `Math.random`;
 DAILY passes a mulberry32 seeded from the UTC date. Only the host generates
 decrees, so the seed itself never crosses the wire.
 
+### Scoring
+
+One implementation, in `decree.js`. A word is worth `STONE x MULT`: stone is the
+word (base + letter values, then relic `stone` / `stoneMul`), mult is the run
+around it (stage x combo, then relic `mult` and `xmult`). `wordPoints()` — the
+CLASSIC path — is a call into the same breakdown with an empty relic list.
+
+That merge was not tidiness. An earlier draft had a separate relic-aware copy of
+the formula, and the two disagreed by ten points at stage 3 combo 9, purely
+because floating-point multiplication is not associative. A test asserts parity
+across ~1,250 word/stage/combo combinations so that class of drift stays
+impossible rather than merely unlikely.
+
 ### Tuning ASCENT
 
 The quota curve in `js/config.js` (`storeyQuota`, driven by `ASCENT.quotaBase`
@@ -123,7 +145,10 @@ and `ASCENT.quotaGrowth`) is a starting point and expected to move. A word is
 worth roughly 900–1,700 early on and several times that once stage and combo
 climb, so the honest way to tune it is to play it. `?debug=1` exposes
 `setStorey(n)` so the eighth storey can be tested without grinding the first
-seven.
+seven. For reference, storey 1 currently falls in about seven words.
+
+Mortar earn rate (`ASCENT.mortarBase` plus overshoot and hearts in hand) and
+relic prices in `relics.js` want the same treatment.
 
 ### Infrastructure
 

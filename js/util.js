@@ -54,6 +54,9 @@ export function deobf(s, key) {
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    // an undefined attribute is an absent one - setAttribute would otherwise
+    // stringify it and set disabled="undefined", which is very much disabled
+    if (v === undefined) continue;
     if (k === 'class') node.className = v;
     else if (k === 'text') node.textContent = v;
     else if (k === 'html') node.innerHTML = v;

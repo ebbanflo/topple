@@ -9,9 +9,12 @@ import {
 } from './config.js';
 import { EV, IN } from './protocol.js';
 import { isValidGuess } from './words.js';
-import { matchesConstraint, genConstraint, describeConstraint, wordPoints } from './decree.js';
+import { matchesConstraint, genConstraint, describeConstraint, wordPoints, scoreWord } from './decree.js';
 import { deobf, now } from './util.js';
 import { mulberry32, hashSeed, dailyKey, dailyNumber } from './rng.js';
+import {
+  RELICS, MAX_RELICS, REROLL_COST, dealRelics, grants, hungerFor,
+} from './relics.js';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard', 'ramp'];
 
@@ -36,6 +39,8 @@ export class Engine {
     net.on(IN.BUY, (d, from) => this.onBuy(d, from));
     net.on(IN.DECREE_PICK, (d, from) => this.onDecreePick(d, from));
     net.on(IN.READY, (_d, from) => this.onReady(from));
+    net.on(IN.RELIC_PICK, (d, from) => this.onRelicPick(d, from));
+    net.on(IN.REROLL, (_d, from) => this.onReroll(from));
     net.on(IN.QUIT, (_d, from) => this.onLeave(from, 'quit'));
     net.on(IN.RESYNC, (_d, from) => this.sendResync(from));
 
@@ -186,8 +191,16 @@ export class Engine {
       // ASCENT only: the run's storey structure. null in CLASSIC/DAILY, which
       // stay endless, so every branch below is a single `t.run &&` away.
       run: this.settings.mode === 'ascent'
-        ? { storey: 1, quota: storeyQuota(1), storeyScore: 0, mortar: 0, phase: 'climb' }
+        ? {
+          storey: 1, quota: storeyQuota(1), storeyScore: 0, mortar: 0, phase: 'climb',
+          relics: Object.fromEntries(this.activePlayers().map((p) => [p.id, []])),
+          offers: {},
+          placed: new Set(),     // who has landed a word this storey (CHORUS)
+          freeMiss: {},          // who has spent their SCAFFOLD this storey
+          insured: false,        // INSURANCE fires once per run
+        }
         : null,
+      lastWordAt: 0,
     };
     this.tower.constraint = genConstraint(
       1, this.tower.used, this.tower.difficulty, this.tower.rampWords, null, this.tower.rng);
@@ -209,6 +222,7 @@ export class Engine {
     return r ? {
       storey: r.storey, quota: r.quota, storeyScore: r.storeyScore,
       mortar: r.mortar, phase: r.phase, storeys: ASCENT.storeys,
+      relics: Object.fromEntries(Object.entries(r.relics).map(([k, v]) => [k, [...v]])),
     } : null;
   }
 
@@ -237,10 +251,18 @@ export class Engine {
     const earned = ASCENT.mortarBase + Math.floor((over / r.quota) * 4) + lives;
     r.mortar += earned;
 
+    // deal each player their own three; the mortar to buy them is shared, so
+    // the team has to decide whose build is worth funding
+    r.offers = {};
+    for (const p of this.activePlayers()) {
+      r.offers[p.id] = dealRelics(r.relics[p.id] || [], 3, t.rng);
+    }
+
     const last = r.storey >= ASCENT.storeys;
     this.net.emit(EV.INTERMISSION, {
       storey: r.storey, quota: r.quota, storeyScore: r.storeyScore,
       mortar: r.mortar, earned, lives: { ...t.lives }, last,
+      offers: { ...r.offers }, relics: this.runInfo().relics,
     });
     if (last) this.timers.next = setTimeout(() => this.crown(), 1200);
   }
@@ -259,10 +281,50 @@ export class Engine {
     r.quota = storeyQuota(r.storey);
     r.storeyScore = 0;
     r.phase = 'climb';
+    r.placed = new Set();
+    r.freeMiss = {};
+    r.offers = {};
     t.constraint = genConstraint(
       t.stage, t.used, t.difficulty, t.rampWords, t.constraint, t.rng);
     this.broadcastTower({ storeyStart: r.storey });
     this.armHunger();
+  }
+
+  broadcastRelics(extra = {}) {
+    const r = this.tower.run;
+    this.net.emit(EV.RELICS, {
+      relics: this.runInfo().relics, mortar: r.mortar, offers: { ...r.offers }, ...extra,
+    });
+  }
+
+  onRelicPick(d, from) {
+    const t = this.tower;
+    const r = t && t.run;
+    const fail = (reason) => this.net.emit(EV.SHOP_ERR, { to: from, reason });
+    if (!r || r.phase !== 'intermission' || this.over) return;
+    const offer = r.offers[from] || [];
+    const id = String(d.id || '');
+    if (!offer.includes(id)) return fail('Not on offer');
+    const relic = RELICS[id];
+    const own = r.relics[from] || (r.relics[from] = []);
+    if (own.includes(id)) return fail('Already held');
+    if (own.length >= MAX_RELICS) return fail(`Only ${MAX_RELICS} relics fit`);
+    if (r.mortar < relic.price) return fail(`Need ${relic.price} mortar`);
+    r.mortar -= relic.price;
+    own.push(id);
+    r.offers[from] = offer.filter((x) => x !== id);
+    this.broadcastRelics({ bought: id, by: from });
+  }
+
+  onReroll(from) {
+    const t = this.tower;
+    const r = t && t.run;
+    const fail = (reason) => this.net.emit(EV.SHOP_ERR, { to: from, reason });
+    if (!r || r.phase !== 'intermission' || this.over) return;
+    if (r.mortar < REROLL_COST) return fail(`Need ${REROLL_COST} mortar`);
+    r.mortar -= REROLL_COST;
+    r.offers[from] = dealRelics(r.relics[from] || [], 3, t.rng);
+    this.broadcastRelics({ rerolled: from });
   }
 
   // The only win in the game.
@@ -332,7 +394,14 @@ export class Engine {
   armHunger() {
     clearTimeout(this.timers.hunger);
     if (!this.tower || this.over) return;
-    this.timers.hunger = setTimeout(() => this.hungerStrike(), this.tower.hungerMs);
+    this.timers.hunger = setTimeout(() => this.hungerStrike(), this.effectiveHungerMs());
+  }
+
+  // The hunger clock is shared, so EVERY player's relics bend it.
+  effectiveHungerMs() {
+    const t = this.tower;
+    if (!t) return TOWER.hungerMs;
+    return t.run ? hungerFor(t.hungerMs, t.run.relics) : t.hungerMs;
   }
 
   // `lives` is the single source of truth; burial is derived from it. Call this
@@ -427,25 +496,44 @@ export class Engine {
     // Buried players are still playing - their words dig, they don't build.
     if ((t.lives[from] ?? 0) <= 0) return this.onDigGuess(word, from);
 
+    const mine = t.run ? (t.run.relics[from] || []) : [];
     if (!isValidGuess(word)) return this.towerMiss(from, word, 'not a word');
-    if (this.towerOnScreen(word)) return this.towerMiss(from, word, 'already in the tower');
-    if (!matchesConstraint(word, t.constraint)) return this.towerMiss(from, word, 'breaks the decree');
+    if (this.towerOnScreen(word) && !grants(mine, 'allowDuplicate')) {
+      return this.towerMiss(from, word, 'already in the tower');
+    }
+    // BLOOD MORTAR builds the illegal word anyway and takes the life for it -
+    // a miss that becomes a floor, which is the whole trade.
+    let bled = false;
+    if (!matchesConstraint(word, t.constraint)) {
+      if (!grants(mine, 'forcePlace')) return this.towerMiss(from, word, 'breaks the decree');
+      bled = true;
+    }
 
     // accepted: the tower grows
     t.used.add(word);
     t.height += 1;
     t.combo += 1;
     t.wordsInStage += 1;
-    const points = wordPoints(word, t.stage, t.combo);
+    const points = this.scoreFor(word, from);
     p.score += points;
     t.rows.push({ pid: from, word, points });
     if (t.rows.length > 60) t.rows.shift();
-    if (t.run) t.run.storeyScore += points;
+    if (t.run) { t.run.storeyScore += points; t.run.placed.add(from); }
+    t.lastWordAt = now();
     this.net.emit(EV.TOWER_WORD, {
       pid: from, word, points, height: t.height, combo: t.combo, stage: t.stage,
       storeyScore: t.run ? t.run.storeyScore : undefined,
     });
     this.armHunger();
+    if (bled) {
+      t.lives[from] = Math.max(0, (t.lives[from] ?? 0) - 1);
+      this.syncBuried();
+      this.net.emit(EV.TOWER_MISS, {
+        pid: from, word, reason: 'forced through in blood', lives: { ...t.lives },
+        combo: t.combo, buried: (t.lives[from] ?? 0) <= 0, forced: true,
+      });
+      if (this.everyoneBuried()) { this.endTower(); return; }
+    }
 
     if (Math.floor(t.height / TOWER.heartEveryHeight) > Math.floor((t.height - 1) / TOWER.heartEveryHeight)) {
       this.grantHearts('milestone');
@@ -467,8 +555,33 @@ export class Engine {
     }
   }
 
+  // Every point a word is worth, relics included. CLASSIC has no run, so it
+  // takes the plain formula and cannot drift when a relic is added.
+  scoreFor(word, pid) {
+    const t = this.tower;
+    if (!t.run) return wordPoints(word, t.stage, t.combo);
+    const below = t.rows.length ? t.rows[t.rows.length - 1].word : null;
+    return scoreWord(word, {
+      relics: t.run.relics[pid] || [],
+      stage: t.stage, combo: t.combo, height: t.height, storey: t.run.storey,
+      sinceLastMs: t.lastWordAt ? now() - t.lastWordAt : null,
+      placedCount: t.run.placed.size, livingCount: this.activePlayers().length,
+      below,
+    });
+  }
+
   towerMiss(from, word, reason) {
     const t = this.tower;
+    // SCAFFOLD eats the first miss of each storey, once per player
+    if (t.run && grants(t.run.relics[from] || [], 'freeMiss') && !t.run.freeMiss[from]) {
+      t.run.freeMiss[from] = true;
+      t.combo = 0;
+      this.net.emit(EV.TOWER_MISS, {
+        pid: from, word, reason: `${reason} — SCAFFOLD held`, lives: { ...t.lives },
+        combo: 0, spared: true,
+      });
+      return;
+    }
     t.lives[from] = Math.max(0, (t.lives[from] ?? 0) - 1);
     t.combo = 0;
     this.syncBuried();
@@ -540,6 +653,19 @@ export class Engine {
   endTower() {
     const t = this.tower;
     if (!t || this.over) return;
+    // INSURANCE: the tower comes down, and then it doesn't. Once per run.
+    if (t.run && !t.run.insured
+        && Object.values(t.run.relics).some((ids) => grants(ids, 'insures'))) {
+      t.run.insured = true;
+      for (const p of this.activePlayers()) t.lives[p.id] = 1;
+      this.syncBuried();
+      t.rows = t.rows.slice(-1);
+      t.height = Math.max(1, 1);
+      t.combo = 0;
+      this.broadcastTower({ insured: true });
+      this.armHunger();
+      return;
+    }
     this.over = true;
     this.clearTimers();
     const standings = [...this.players].sort((a, b) => b.score - a.score);
@@ -648,6 +774,7 @@ export class Engine {
         digNeed: TOWER.digWords,
         offer: this.tower.offer ? { options: this.tower.offer.options } : null,
         run: this.runInfo(),
+        offers: this.tower.run ? { ...this.tower.run.offers } : null,
         buried: Object.fromEntries(Object.entries(this.tower.buried)
           .map(([pid, d]) => [pid, { cleared: d.cleared }])),
       } : null,

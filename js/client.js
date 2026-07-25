@@ -38,6 +38,7 @@ export class Mirror {
       [EV.SHOP_ERR]: (d) => { if (d.to === selfId) { this.showToast(d.reason); this.fire('shoperr', d); } },
       [EV.DECREE_OFFER]: (d) => this.onDecreeOffer(d),
       [EV.INTERMISSION]: (d) => this.onIntermission(d),
+      [EV.RELICS]: (d) => this.onRelics(d),
       [EV.TOWER]: (d) => this.onTower(d),
       [EV.TOWER_WORD]: (d) => this.onTowerWord(d),
       [EV.TOWER_MISS]: (d) => this.onTowerMiss(d),
@@ -205,11 +206,26 @@ export class Mirror {
     }
     if (d.lives) { t.lives = d.lives; this.syncBuried(); }
     t.offer = null;
+    if (t.run) { t.run.relics = d.relics || t.run.relics; t.run.offers = d.offers || {}; }
     this.intermission = d;
     this.fire('intermission', d);
   }
 
+  onRelics(d) {
+    const t = this.tower;
+    if (!t || !t.run) return;
+    t.run.relics = d.relics || t.run.relics;
+    t.run.mortar = d.mortar;
+    t.run.offers = d.offers || {};
+    this.fire('relics', d);
+  }
+
+  myRelics() { return (this.myRun()?.relics?.[this.selfId]) || []; }
+  myShop() { return (this.myRun()?.offers?.[this.selfId]) || []; }
+
   ready() { this.net.emit(IN.READY, {}); }
+  pickRelic(id) { this.net.emit(IN.RELIC_PICK, { id }); }
+  reroll() { this.net.emit(IN.REROLL, {}); }
 
   myRun() { return (this.tower && this.tower.run) || null; }
 
@@ -281,7 +297,8 @@ export class Mirror {
         hungerMs: s.tower.hungerMs, lives: { ...s.tower.lives },
         hungerAt: now() + s.tower.hungerMs,
         digNeed: s.tower.digNeed ?? 3,
-        run: s.tower.run || null,
+        run: s.tower.run
+          ? { ...s.tower.run, offers: s.offers || s.tower.run.offers || {} } : null,
         offer: s.tower.offer
           ? { options: s.tower.offer.options, until: now() + (this.settings?.draftMs ?? 9000) }
           : null,
