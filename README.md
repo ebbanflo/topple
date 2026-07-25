@@ -9,11 +9,24 @@ served straight off GitHub Pages, with Supabase Realtime carrying the room.
 
 ---
 
+## Modes
+
+**CLASSIC** — the endless game. Climb until everyone is buried.
+
+**DAILY** — the same tower for everybody, everywhere, all day. Decrees are dealt
+from a seed derived from the UTC date rather than from chance, and the settings
+are locked so the runs are actually comparable. Rolls over at UTC midnight, so a
+room split across timezones still plays the same tower.
+
 ## Playing
 
 The host opens a room and reads out the 4-character code (or shares the invite
 link). Up to three others join. Solo is a legitimate run.
 
+- **The draft** — every stage change deals the team three decrees instead of
+  imposing one. Any player may pick and the first tap wins; the old decree stays
+  live while you decide and the hunger bar keeps draining, so dithering costs
+  blood. Nobody picks in time and the tower picks for you.
 - **Decree** — the rule every word must satisfy. Use a letter, a letter pinned
   to a slot, banned letters, vowel counts, and stranger twists at HARD: a rare
   letter, matching first/last letters, a double letter, "no E", "ends in K", no
@@ -52,7 +65,8 @@ Host-authoritative, with a thin mirror on every client.
 | `js/client.js` | `Mirror` — the state every peer (host included) renders from. Asserts at startup that it handles every host broadcast in the registry. |
 | `js/protocol.js` | The single registry of wire events. Adding a host event without a mirror handler throws immediately. |
 | `js/transport.js` | Swappable transport: Supabase Realtime broadcast + presence, or `BroadcastChannel` for tests (`?t=local`). |
-| `js/decree.js` | Decree generation, matching and scoring. Pure functions over the dictionary — used by both the engine and the test suite. |
+| `js/decree.js` | Decree generation, matching and scoring. Pure functions over the dictionary — used by both the engine and the test suite. Takes its randomness as an argument, so it holds no RNG state. |
+| `js/rng.js` | mulberry32 plus a string hash. Same seed, same tower, on every device. |
 | `js/tower3d.js` | The tower renderer. Pure CSS 3D; deliberately swappable (`sync / push / miss / stress / bless / collapse / reset`). |
 | `js/ui.js` | Everything else on screen. Renders exclusively from the mirror. |
 | `js/words.js` | The dictionary gate, and nothing else. `data/solutions.js` is used only by `decree.js`, for the recognizability floor that keeps generated decrees humane. |
@@ -84,6 +98,15 @@ explicit height — including the text ones, because `♥♥♥` and `—` produ
 different line boxes — and the tower is the single elastic element that
 absorbs whatever space is left. The keyboard therefore cannot move, whatever
 the tower, the HUD or a rescue is doing. Two E2E tests assert exactly that.
+
+### Seeded runs
+
+`decree.js` takes its generator as a parameter rather than reaching for
+`Math.random`, so it stays a module of pure functions with no RNG state to reset
+between tests — and an entire run's decree sequence can be generated and
+compared straight from node. CLASSIC passes nothing and gets `Math.random`;
+DAILY passes a mulberry32 seeded from the UTC date. Only the host generates
+decrees, so the seed itself never crosses the wire.
 
 ### Infrastructure
 
@@ -117,7 +140,10 @@ Playwright drives the real site over `LocalTransport` — real engine, real
 mirror, real DOM, no network. The suite covers the decree generator's
 survivability and recognizability floors, the no-repeat rule, solo and co-op
 runs, misses, hunger, burial and digging out, rope purchases, both blessings,
-the scroll-off duplicate rule, and the layout contract above.
+the scroll-off duplicate rule, the decree draft (first-pick-wins and the
+timeout), and the layout contract above. `rng.spec.js` runs entirely in node:
+seeded determinism, UTC day rollover, and proof that seeding doesn't smuggle a
+decree past the survivability gates.
 
 ## Deploying
 

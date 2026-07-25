@@ -277,15 +277,20 @@ export class UI {
       ul.append(el('li', { class: 'lobby-player empty', text: 'waiting…' }));
     }
     const s = m.settings || DEFAULT_SETTINGS;
+    const daily = s.mode === 'daily';
     for (const seg of document.querySelectorAll('.seg')) {
       const key = seg.dataset.setting;
       for (const btn of seg.querySelectorAll('.seg-btn')) {
         btn.classList.toggle('on', String(s[key]) === btn.dataset.val);
-        btn.disabled = !m.isHost();
+        // DAILY owns its own knobs - a shared run everyone tuned differently
+        // would not be a shared run
+        btn.disabled = !m.isHost() || (daily && key !== 'mode');
       }
     }
-    $('mode-blurb').textContent =
-      `stack real 5-letter words under the decree. it changes every ${s.rampWords} words. misses cost lives. solo is fine.`;
+    $('lobby-settings').classList.toggle('locked', daily);
+    $('mode-blurb').textContent = daily
+      ? `TOWER #${m.daily?.n ?? '—'} — the same decrees for everyone today, settings locked. compare heights.`
+      : `stack real 5-letter words under the decree. it changes every ${s.rampWords} words. misses cost lives. solo is fine.`;
     const enough = m.players.filter((p) => p.connected).length >= 1;
     $('btn-start').classList.toggle('hidden', !m.isHost());
     $('btn-start').disabled = !enough;
@@ -326,7 +331,9 @@ export class UI {
     $('decree').classList.remove('swap');
     void $('decree').offsetWidth;
     $('decree').classList.add('swap');
-    $('hdr-slug').textContent = `INT. THE TOWER — STAGE ${m.tower.stage}`;
+    $('hdr-slug').textContent = m.daily
+      ? `INT. THE TOWER #${m.daily.n} — STAGE ${m.tower.stage}`
+      : `INT. THE TOWER — STAGE ${m.tower.stage}`;
     this.renderTowerHud();
     this.renderTowerInput();
     this.renderStrip();

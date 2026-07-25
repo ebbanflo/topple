@@ -78,7 +78,15 @@ export const LETTER_VALUES = {
 // then holds at hard; the others pin every decree to that band all game.
 export const DIFFICULTY_CHOICES = ['easy', 'medium', 'hard', 'ramp'];
 
+// CLASSIC is the endless game. DAILY is the same game dealt from a seed derived
+// from the UTC date, so everyone playing today climbs the same decrees in the
+// same order - which only means anything if the knobs are identical too, hence
+// DAILY_SETTINGS being forced over whatever the host had selected.
+export const MODE_CHOICES = ['classic', 'daily'];
+export const DAILY_SETTINGS = { difficulty: 'ramp', rampWords: 5, hungerMs: TOWER.hungerMs };
+
 export const DEFAULT_SETTINGS = {
+  mode: 'classic',
   difficulty: 'ramp',
   rampWords: TOWER.defaultRampWords, // words per decree, host-set 3/5/10
   revealMs: 4000,                    // pacing beat (tests shrink it)

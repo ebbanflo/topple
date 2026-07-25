@@ -261,6 +261,7 @@ input, button { font-family: inherit; color: inherit; }
 .seg-btn:disabled { cursor: default; opacity: .5; }
 .seg-btn:not(:disabled):active { transform: translateY(1px); }
 
+.lobby-settings.locked .setting:not(#set-mode) { opacity: .4; }
 .mode-blurb { margin: .2rem 0 0; font-size: .7rem; color: var(--ink-2); letter-spacing: .05em; line-height: 1.5; }
 .lobby-wait { font-size: .7rem; color: var(--ink-3); letter-spacing: .1em; margin: 0; }
 

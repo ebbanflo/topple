@@ -464,6 +464,65 @@ test.describe('topple', () => {
     await expect(host.locator('#ovl-draft')).toBeHidden();
   });
 
+  test('DAILY: two independent rooms get the same tower, and the knobs are locked', async ({ context }) => {
+    test.setTimeout(60000);
+    // Two entirely separate rooms, hosted by different players, on the same day.
+    const runs = [];
+    for (const name of ['ALPHA', 'BETA']) {
+      const page = await openPage(context);
+      await hostGame(page, name, { ...FAST, rampWords: 1, draftMs: 20000 });
+      await page.evaluate(() => window.__topple.setSettings({ mode: 'daily' }));
+
+      // DAILY owns its own settings: every other control is disabled and the
+      // values are overridden regardless of what the host had chosen
+      await expect(page.locator('[data-setting="mode"] [data-val="daily"]')).toHaveClass(/\bon\b/);
+      await expect(page.locator('[data-setting="difficulty"] [data-val="hard"]')).toBeDisabled();
+      await expect(page.locator('[data-setting="rampWords"] [data-val="3"]')).toBeDisabled();
+      const st = (await state(page)).settings;
+      expect(st.difficulty).toBe('ramp');
+      expect(st.rampWords).toBe(5); // the rampWords:1 above was overridden
+      await expect(page.locator('#mode-blurb')).toContainText('TOWER #');
+
+      await page.click('#btn-start');
+      await waitTower(page);
+      const t = await towerState(page);
+      // climb into a draft so we compare the dealt OPTIONS too, not just the opener
+      const [w] = findWords(t.constraint, [], 1);
+      for (let i = 0; i < 5; i++) {
+        const used = await usedWords(page);
+        const [next] = findWords((await towerState(page)).constraint, used, 1);
+        await climb(page, next);
+      }
+      await page.waitForFunction(() => !!window.__topple.state().tower.offer, null, { polling: 50 });
+      runs.push({
+        opener: describeConstraint(t.constraint),
+        offer: (await towerState(page)).offer.options.map(describeConstraint),
+        page,
+      });
+      expect(w).toBeTruthy();
+    }
+
+    // the whole dealt sequence matches across rooms that never spoke to each other
+    expect(runs[0].opener).toBe(runs[1].opener);
+    expect(runs[0].offer).toEqual(runs[1].offer);
+    // and the run is labelled so people can compare
+    await expect(runs[0].page.locator('#hdr-slug')).toContainText('THE TOWER #');
+  });
+
+  test('CLASSIC does not deal the same tower twice', async ({ context }) => {
+    const openers = [];
+    for (const name of ['ONE', 'TWO', 'THREE']) {
+      const page = await openPage(context);
+      await hostGame(page, name, { ...FAST, rampWords: 99, difficulty: 'medium' });
+      await page.click('#btn-start');
+      await waitTower(page);
+      openers.push(describeConstraint((await towerState(page)).constraint));
+    }
+    // unseeded rooms are independent; three identical openers would mean the
+    // default generator had been seeded by accident
+    expect(new Set(openers).size).toBeGreaterThan(1);
+  });
+
   test('decree difficulty pools: all survivable over a long game, and every decree is clearable with RECOGNIZABLE words', () => {
     for (const difficulty of ['easy', 'medium', 'hard', 'ramp']) {
       const used = new Set();

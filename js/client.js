@@ -70,6 +70,7 @@ export class Mirror {
     this.hostId = d.hostId;
     this.players = d.players;
     this.settings = d.settings;
+    this.daily = d.daily || null;
     this.started = d.started;
     if (!d.started) {
       this.over = false; this.gameover = null; this.tower = null;
@@ -79,6 +80,7 @@ export class Mirror {
 
   onStart(d) {
     this.settings = d.settings;
+    this.daily = d.daily || null;
     for (const sp of d.players) {
       const p = this.player(sp.id);
       if (p) Object.assign(p, sp);

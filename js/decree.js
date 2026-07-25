@@ -11,8 +11,13 @@ const VOWELS = ['a', 'e', 'i', 'o', 'u'];
 const COMMON = 'etaoinshrdlcumwfgypb'; // top ~20 by in-dictionary frequency
 const CONS = 'tnshrdlcmwfgpb';         // common consonants (COMMON minus vowels)
 const RARE = 'jqxzvk';                 // reserved for HARD - never in COMMON
-const rand = (n) => Math.floor(Math.random() * n);
-const pickFrom = (s) => s[rand(s.length)];
+// Every source of randomness in this file takes its generator as an argument.
+// decree.js stays a module of pure functions - no module-level RNG state, no
+// global to reset between tests - which is what lets the same seed deal the
+// same run on every device, and lets the test suite call any of this directly
+// from node with no setup at all.
+const rand = (n, r) => Math.floor(r() * n);
+const pickFrom = (s, r) => s[rand(s.length, r)];
 const uniqArr = (arr) => [...new Set(arr)];
 
 // A decree: { req, reqAt, ban, rep, uniq, vmin, vmax, bookend, dvowel }.
@@ -72,25 +77,25 @@ export function countRecognizable(c, floor = Infinity) {
 // every generator here reliably clears its pool's minWords floor below).
 // EASY: always four-figure possible-word counts - never punishing.
 const EASY = [
-  () => ({ req: [pickFrom(COMMON)] }),
-  () => ({ reqAt: [{ i: rand(5), ch: pickFrom(COMMON.slice(0, 12)) }] }),
-  () => ({ vmin: 2 }),                         // at least 2 vowels
-  () => ({ uniq: true }),                      // no repeated letters
-  () => ({ ban: [pickFrom('jqxz')] }),         // one rare letter forbidden
+  (r) => ({ req: [pickFrom(COMMON, r)] }),
+  (r) => ({ reqAt: [{ i: rand(5, r), ch: pickFrom(COMMON.slice(0, 12), r) }] }),
+  () => ({ vmin: 2 }),                              // at least 2 vowels
+  () => ({ uniq: true }),                           // no repeated letters
+  (r) => ({ ban: [pickFrom('jqxz', r)] }),          // one rare letter forbidden
 ];
 
 // MEDIUM: real friction (dozens to low-thousands), never a coin-flip.
 const MEDIUM = [
-  () => ({ req: uniqArr([pickFrom(COMMON.slice(0, 14)), pickFrom(COMMON.slice(0, 14))]) }),
-  () => {
-    const i = rand(4);
-    return { reqAt: [{ i, ch: pickFrom(COMMON.slice(0, 14)) }, { i: i + 1 + rand(4 - i), ch: pickFrom(COMMON.slice(0, 14)) }] };
+  (r) => ({ req: uniqArr([pickFrom(COMMON.slice(0, 14), r), pickFrom(COMMON.slice(0, 14), r)]) }),
+  (r) => {
+    const i = rand(4, r);
+    return { reqAt: [{ i, ch: pickFrom(COMMON.slice(0, 14), r) }, { i: i + 1 + rand(4 - i, r), ch: pickFrom(COMMON.slice(0, 14), r) }] };
   },
-  () => ({ vmin: 1, vmax: 1 }),                 // exactly one vowel
-  () => ({ rep: true }),                        // needs a double letter
-  () => ({ dvowel: true }),                     // two vowels in a row
-  () => ({ reqAt: [{ i: rand(5), ch: pickFrom(COMMON.slice(0, 14)) }], ban: [pickFrom(VOWELS)] }),
-  () => ({ vmin: 3 }),                          // 3+ vowels
+  () => ({ vmin: 1, vmax: 1 }),                     // exactly one vowel
+  () => ({ rep: true }),                            // needs a double letter
+  () => ({ dvowel: true }),                         // two vowels in a row
+  (r) => ({ reqAt: [{ i: rand(5, r), ch: pickFrom(COMMON.slice(0, 14), r) }], ban: [pickFrom(VOWELS, r)] }),
+  () => ({ vmin: 3 }),                              // 3+ vowels
 ];
 
 // HARD: brutal but never JUST "no vowels, minus more letters" - a big, varied
@@ -103,17 +108,17 @@ const MEDIUM = [
 // through fresh ideas. countPossible + countRecognizable keep every one honest
 // at runtime (see genConstraint).
 const HARD = [
-  () => ({ bookend: true }),                                       // first letter == last letter
-  () => ({ reqAt: [{ i: 0, ch: pickFrom('bcdfgp') }] }),          // STARTS WITH B/C/D/F/G/P
-  () => ({ reqAt: [{ i: 4, ch: pickFrom('tdkyh') }] }),           // ENDS IN T/D/K/Y/H
-  () => ({ req: [pickFrom(RARE)] }),                                // a genuinely rare letter (J/Q/X/Z/V/K)
+  () => ({ bookend: true }),                                        // first letter == last letter
+  (r) => ({ reqAt: [{ i: 0, ch: pickFrom('bcdfgp', r) }] }),        // STARTS WITH B/C/D/F/G/P
+  (r) => ({ reqAt: [{ i: 4, ch: pickFrom('tdkyh', r) }] }),         // ENDS IN T/D/K/Y/H
+  (r) => ({ req: [pickFrom(RARE, r)] }),                            // a genuinely rare letter (J/Q/X/Z/V/K)
   () => ({ ban: [...VOWELS] }),                                     // NO VOWELS - the occasional spicy "crypt/nymph" test
-  () => ({ ban: [pickFrom('eao')] }),                              // ban a common vowel: NO E / NO A / NO O (Gadsby-style)
-  () => ({ vmin: 1, vmax: 1, reqAt: [{ i: 1 + rand(3), ch: pickFrom(CONS) }] }), // exactly 1 vowel + an interior consonant pinned
-  () => ({ rep: true, vmin: 1, vmax: 1 }),                         // a double letter AND exactly one vowel
-  () => ({ rep: true, req: [pickFrom(COMMON.slice(0, 10))] }),     // a double letter AND a required common letter
-  () => ({ bookend: true, vmin: 2 }),                              // first == last AND two-plus vowels
-  () => ({ req: uniqArr([pickFrom(VOWELS), pickFrom(CONS), pickFrom(CONS)]) }), // 3 required letters, but at least one vowel keeps it human
+  (r) => ({ ban: [pickFrom('eao', r)] }),                           // ban a common vowel: NO E / NO A / NO O (Gadsby-style)
+  (r) => ({ vmin: 1, vmax: 1, reqAt: [{ i: 1 + rand(3, r), ch: pickFrom(CONS, r) }] }), // exactly 1 vowel + an interior consonant pinned
+  () => ({ rep: true, vmin: 1, vmax: 1 }),                          // a double letter AND exactly one vowel
+  (r) => ({ rep: true, req: [pickFrom(COMMON.slice(0, 10), r)] }),  // a double letter AND a required common letter
+  () => ({ bookend: true, vmin: 2 }),                               // first == last AND two-plus vowels
+  (r) => ({ req: uniqArr([pickFrom(VOWELS, r), pickFrom(CONS, r), pickFrom(CONS, r)]) }), // 3 required letters, but at least one vowel keeps it human
 ];
 
 function poolFor(difficulty, stage) {
@@ -129,7 +134,7 @@ function poolFor(difficulty, stage) {
   return HARD;
 }
 
-export function genConstraint(stage, used, difficulty = 'ramp', rampWords = 1, prev = null) {
+export function genConstraint(stage, used, difficulty = 'ramp', rampWords = 1, prev = null, rng = Math.random) {
   const pool = poolFor(difficulty, stage);
   // A decree must be survivable: enough unused dictionary words must satisfy
   // it. Floor scales with the pool (hard is SUPPOSED to be cruel, easy never
@@ -149,15 +154,15 @@ export function genConstraint(stage, used, difficulty = 'ramp', rampWords = 1, p
   const recogFloor = pool === HARD ? 25 : pool === MEDIUM ? 40 : 100;
   const prevDesc = prev ? describeConstraint(prev) : null;
   for (let tries = 0; tries < 40; tries++) {
-    const c = pool[rand(pool.length)]();
+    const c = pool[rand(pool.length, rng)](rng);
     if (describeConstraint(c) === prevDesc) continue; // no immediate repeat
     if (countPossible(c, used) >= minWords && countRecognizable(c, recogFloor) >= recogFloor) return c;
   }
   // this pool is exhausted this deep into a long game (rare) - drop a notch
   // rather than serve something the team can no longer possibly satisfy
-  if (pool === HARD) return genConstraint(stage, used, 'medium', rampWords, prev);
-  if (pool === MEDIUM) return genConstraint(stage, used, 'easy', rampWords, prev);
-  return { req: [pickFrom('east')] };
+  if (pool === HARD) return genConstraint(stage, used, 'medium', rampWords, prev, rng);
+  if (pool === MEDIUM) return genConstraint(stage, used, 'easy', rampWords, prev, rng);
+  return { req: [pickFrom('east', rng)] };
 }
 
 export function describeConstraint(c) {

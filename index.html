@@ -55,6 +55,13 @@
     <button id="btn-share" class="btn-ghost">COPY INVITE LINK</button>
     <ul id="lobby-players" class="lobby-players"></ul>
     <div id="lobby-settings" class="lobby-settings">
+      <div class="setting" id="set-mode">
+        <span class="setting-label">MODE</span>
+        <div class="seg" role="radiogroup" data-setting="mode">
+          <button data-val="classic" class="seg-btn">CLASSIC</button>
+          <button data-val="daily" class="seg-btn">DAILY</button>
+        </div>
+      </div>
       <div class="setting" id="set-diff">
         <span class="setting-label">DECREE LEVEL</span>
         <div class="seg" role="radiogroup" data-setting="difficulty">
@@ -167,6 +174,11 @@
       <h3>SCORING</h3>
       <p>Each floor scores base &times; letter values &times; <b>stage</b>, inflated by your
       <b>combo</b> (every consecutive good word, team-wide). Numbers are meant to be absurd.</p>
+      <h3>DAILY</h3>
+      <p>Same tower for everybody, everywhere, all day. The decrees are dealt from the date rather
+      than from chance, and the settings are locked so the runs are actually comparable &mdash;
+      compare heights with your friends and argue about it. Rolls over at <b>UTC midnight</b>, so a
+      room split across timezones still plays the same tower.</p>
       <h3>THE DRAFT</h3>
       <p>Every time the decree changes, the tower deals you <b>three</b> instead of imposing one.
       <b>Any</b> player can pick and the <b>first tap decides for the room</b>, so argue fast. The

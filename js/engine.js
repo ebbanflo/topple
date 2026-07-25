@@ -4,13 +4,14 @@
 // and mirror the host's broadcasts (EV.*).
 
 import {
-  MAX_PLAYERS, MIN_PLAYERS, WORD_LEN, DECREE_OPTIONS,
+  MAX_PLAYERS, MIN_PLAYERS, WORD_LEN, DECREE_OPTIONS, MODE_CHOICES, DAILY_SETTINGS,
   SHOP, DEFAULT_SETTINGS, PLAYER_COLORS, LEAVE_GRACE_MS, TOWER,
 } from './config.js';
 import { EV, IN } from './protocol.js';
 import { isValidGuess } from './words.js';
 import { matchesConstraint, genConstraint, describeConstraint, wordPoints } from './decree.js';
 import { deobf, now } from './util.js';
+import { mulberry32, hashSeed, dailyKey, dailyNumber } from './rng.js';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard', 'ramp'];
 
@@ -95,8 +96,20 @@ export class Engine {
   setSettings(patch) {
     if (this.started) return;
     Object.assign(this.settings, patch);
+    if (!MODE_CHOICES.includes(this.settings.mode)) this.settings.mode = 'classic';
+    // A shared daily is only comparable if everyone plays the same knobs, so
+    // DAILY overrides them rather than trusting each host to match.
+    if (this.settings.mode === 'daily') Object.assign(this.settings, DAILY_SETTINGS);
     if (!DIFFICULTIES.includes(this.settings.difficulty)) this.settings.difficulty = 'ramp';
     this.broadcastLobby();
+  }
+
+  // Non-null only in DAILY. Guests render the run number from this; the host is
+  // the only peer that actually generates decrees, so the seed itself never
+  // needs to cross the wire.
+  daily() {
+    if (this.settings.mode !== 'daily') return null;
+    return { key: dailyKey(), n: dailyNumber() };
   }
 
   broadcastLobby() {
@@ -104,6 +117,7 @@ export class Engine {
       hostId: this.hostId,
       started: this.started,
       settings: this.settings,
+      daily: this.daily(),
       players: this.players.map((p) => ({
         id: p.id, name: p.name, color: p.color, score: p.score,
         alive: p.alive, connected: p.connected, spectator: p.spectator,
@@ -126,6 +140,7 @@ export class Engine {
     this.over = false;
     this.net.emit(EV.START, {
       settings: this.settings,
+      daily: this.daily(),
       players: this.players.map((p) => ({ id: p.id, name: p.name, color: p.color, score: p.score })),
     });
     this.timers.next = setTimeout(() => this.initTower(), this.settings.countdownMs ?? 1200);
@@ -162,8 +177,14 @@ export class Engine {
       difficulty: DIFFICULTIES.includes(this.settings.difficulty) ? this.settings.difficulty : 'ramp',
       constraint: null,
       offer: null,              // a decree draft in flight, if any
+      // CLASSIC deals from Math.random; DAILY deals from the date, so every
+      // room in the world walks the same decrees today.
+      rng: this.settings.mode === 'daily'
+        ? mulberry32(hashSeed(dailyKey()))
+        : Math.random,
     };
-    this.tower.constraint = genConstraint(1, this.tower.used, this.tower.difficulty, this.tower.rampWords);
+    this.tower.constraint = genConstraint(
+      1, this.tower.used, this.tower.difficulty, this.tower.rampWords, null, this.tower.rng);
     this.broadcastTower();
     this.armHunger();
   }
@@ -187,14 +208,14 @@ export class Engine {
     const options = [];
     const seen = new Set([describeConstraint(t.constraint)]);
     for (let tries = 0; tries < 30 && options.length < DECREE_OPTIONS; tries++) {
-      const c = genConstraint(t.stage, t.used, t.difficulty, t.rampWords, t.constraint);
+      const c = genConstraint(t.stage, t.used, t.difficulty, t.rampWords, t.constraint, t.rng);
       const desc = describeConstraint(c);
       if (seen.has(desc)) continue; // three identical choices is not a choice
       seen.add(desc);
       options.push(c);
     }
     if (options.length === 0) { // pool exhausted this deep: just move on
-      t.constraint = genConstraint(t.stage, t.used, t.difficulty, t.rampWords, t.constraint);
+      t.constraint = genConstraint(t.stage, t.used, t.difficulty, t.rampWords, t.constraint, t.rng);
       this.broadcastTower();
       return;
     }
