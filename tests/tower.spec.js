@@ -611,7 +611,10 @@ test.describe('topple', () => {
     expect(run0.levels).toBe(8);
     expect(run0.quota).toBeGreaterThan(0);
     expect(run0.levelScore).toBe(0);
-    await expect(host.locator('#tower-height')).toContainText('LEVEL 1/8');
+    await expect(host.locator('#quota-band')).toBeVisible();
+    await expect(host.locator('#quota-level')).toContainText('QUOTA');
+    await expect(host.locator('#hdr-status')).toContainText('LEVEL 1 / 8');
+    await expect(host.locator('#quota-nums')).toContainText(run0.quota.toLocaleString('en-US'));
 
     // the guest spends a mark first, so we can prove the intermission hands it back
     await miss(guest, 'zzzzz');
@@ -708,6 +711,7 @@ test.describe('topple', () => {
     await waitTower(host);
     expect((await towerState(host)).run).toBeNull();
     await expect(host.locator('#tower-height')).toContainText('HEIGHT');
+    await expect(host.locator('#quota-band')).toBeHidden();
   });
 
   test('ASCENT shop: buying a relic costs coins and measurably changes scoring', async ({ context }) => {
@@ -1028,6 +1032,52 @@ test.describe('topple', () => {
     expect(mounted).not.toContain(words[0]);             // scrolled out of the window
     // but it's still real height/score, just not mounted
     expect((await towerState(host)).height).toBe(14);
+  });
+
+  test('ASCENT: the quota band tracks the level and the keyboard still never moves', async ({ context }) => {
+    test.setTimeout(90000);
+    const host = await openPage(context);
+    await hostGame(host, 'GAUGE', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    await host.click('[data-setting="mode"] [data-val="ascent"]');
+    await host.waitForFunction(() => window.__topple.state().settings.mode === 'ascent',
+      null, { polling: 50 });
+    await host.click('#btn-start');
+    await waitTower(host);
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+
+    // offsetTop, not boundingBox: layout position only, immune to the screen's
+    // entry transform (same reason as the CLASSIC stability tests)
+    const keyboardY = () => host.locator('#keyboard').evaluate((el) => el.offsetTop);
+    const y0 = await keyboardY();
+    const width = () => host.locator('#quota-fill').evaluate((el) => el.style.width);
+    expect(await width()).toBe('0%');
+
+    const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 40);
+    let placed = 0;
+    for (const w of words) {
+      if ((await towerState(host)).run.phase !== 'climb') break;
+      if ((await usedWords(host)).includes(w)) continue;
+      await climb(host, w);
+      placed += 1;
+      // the word that crosses the quota switches to the intermission, where the
+      // keyboard is legitimately unrendered - stop before asserting on it
+      if ((await towerState(host)).run.phase !== 'climb') break;
+      // the band is an ASCENT-only element, so this is exactly where a layout
+      // regression would show up
+      expect(await keyboardY()).toBe(y0);
+      if (placed === 1) {
+        const run = (await towerState(host)).run;
+        const pct = (run.levelScore / run.quota) * 100;
+        expect(parseFloat(await width())).toBeCloseTo(pct, 0);
+        await expect(host.locator('#quota-nums'))
+          .toContainText(run.levelScore.toLocaleString('en-US'));
+      }
+    }
+    expect(placed).toBeGreaterThan(2);
+
+    // the level cleared, so the band reached full
+    await host.waitForSelector('#scr-inter:not(.hidden)');
+    expect(parseFloat(await width())).toBe(100);
   });
 
   test('duplicate rule is on-screen only: a word that scrolled off can be replayed, one still visible cannot', async ({ context }) => {

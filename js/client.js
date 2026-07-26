@@ -69,7 +69,7 @@ export class Mirror {
   // ---------- pub/sub ----------
   onChange(fn) { this.listeners.push(fn); }
   fire(type, d = {}) { for (const fn of this.listeners) fn(type, d); }
-  showToast(msg) { this.toast = msg; this.fire('toast', { msg }); }
+  showToast(msg, kind = null) { this.toast = msg; this.fire('toast', { msg, kind }); }
 
   me() { return this.players.find((p) => p.id === this.selfId); }
   player(id) { return this.players.find((p) => p.id === id); }
@@ -172,7 +172,7 @@ export class Mirror {
       this.pendingTower = 0;
       this.showToast(d.buried
         ? `"${d.word.toUpperCase()}" — ${d.reason}. BURIED — dig yourself out.`
-        : `"${d.word.toUpperCase()}" — ${d.reason}`);
+        : `"${d.word.toUpperCase()}" — ${d.reason}`, 'loss');
     }
     this.fire('towermiss', d);
   }
@@ -184,7 +184,7 @@ export class Mirror {
     t.combo = 0;
     t.hungerAt = now() + t.hungerMs;
     this.syncBuried();
-    this.showToast('OUT OF TIME — everyone loses a mark');
+    this.showToast('OUT OF TIME — everyone loses a mark', 'loss');
     this.fire('towerhunger', d);
   }
 

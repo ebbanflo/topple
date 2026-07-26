@@ -101,7 +101,11 @@ export class Tower3D {
     const slab = el('div', { class: 't3d-slab' });
     const front = el('div', { class: 't3d-face t3d-front' });
     for (const ch of row.word) {
-      front.append(el('span', { class: 't3d-glyph', text: ch.toUpperCase() }));
+      // J Q X Z K are tinted wherever a letter is drawn - see markRare in ui.js
+      front.append(el('span', {
+        class: 't3d-glyph', text: ch.toUpperCase(),
+        ...('jqxzk'.includes(ch.toLowerCase()) ? { 'data-rare': '' } : {}),
+      }));
     }
     front.append(el('span', { class: 't3d-pts', text: `+${row.points.toLocaleString('en-US')}` }));
     slab.append(

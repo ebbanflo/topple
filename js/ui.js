@@ -12,6 +12,14 @@ import { Tower3D } from './tower3d.js';
 const $ = (id) => document.getElementById(id);
 const KEY_ROWS = ['qwertyuiop', 'asdfghjkl', '⏎zxcvbnm⌫'];
 const MAX_MARKS = TOWER.maxLives;
+const RARE_LETTERS = new Set(['j', 'q', 'x', 'z', 'k']);
+// Marks the letter so CSS can tint it. One helper, used at all three places a
+// letter is drawn - the tower slab, the input row and the keyboard - because
+// wiring one and forgetting the others is the obvious way to get this wrong.
+const markRare = (node, ch) => {
+  if (ch && RARE_LETTERS.has(ch.toLowerCase())) node.setAttribute('data-rare', '');
+  else node.removeAttribute('data-rare');
+};
 const COLLAPSE_MS = 2100; // let the tower actually fall before the podium
 
 // The substats band is fixed-width and fixed-height; quotas run to six figures,
@@ -80,6 +88,7 @@ export class UI {
           text: label,
           onclick: () => this.pressKey(ch),
         });
+        markRare(k, ch);
         rowEl.append(k);
         this.keys[ch] = k;
       }
@@ -214,10 +223,11 @@ export class UI {
     $('ovl-pause').classList.toggle('hidden', !on);
   }
 
-  showToast(msg, ms = 2600) {
+  showToast(msg, ms = 2600, kind = null) {
     const t = $('toast');
     t.textContent = msg;
-    t.classList.remove('hidden', 'pop');
+    t.classList.remove('hidden', 'pop', 'loss', 'bonus');
+    if (kind) t.classList.add(kind);
     // mid-run the bottom of the screen is all keyboard — speak over the tower
     t.classList.toggle('over-tower', !$('scr-game').classList.contains('hidden'));
     void t.offsetWidth;
@@ -270,7 +280,7 @@ export class UI {
         sfx.ret();
         break;
       case 'shake': this.shakeInput(); sfx.invalid(); break;
-      case 'toast': this.showToast(d.msg); break;
+      case 'toast': this.showToast(d.msg, 2600, d.kind); break;
       case 'scores': this.renderStrip(); this.renderShop(); if (d.buyer === m.selfId) sfx.buy(); break;
       case 'left': this.onLeft(d); break;
       case 'gameover': this.onGameOver(d); break;
@@ -340,7 +350,8 @@ export class UI {
         class: 'strip-marks' + (n > 0 ? '' : ' digging'), 'data-testid': `lives-${p.id}`,
         // marks you still hold, then the ones you've spent - so the readout is
         // a constant width and losing one is a visible change, not a shrink
-        text: n > 0 ? '◆'.repeat(n) + '◇'.repeat(Math.max(0, MAX_MARKS - n))
+        html: n > 0
+          ? '◆'.repeat(n) + `<span class="spent">${'◇'.repeat(Math.max(0, MAX_MARKS - n))}</span>`
           : `${(m.tower.buried[p.id]?.cleared ?? 0)}/${m.digNeed()}`,
       }) : null));
     }
@@ -395,12 +406,41 @@ export class UI {
     scoreEl.classList.remove('bump');
     void scoreEl.offsetWidth;
     scoreEl.classList.add('bump');
+    // the substats say the same thing in every mode now; the level and its
+    // quota get a band of their own below
     const run = t.run;
-    $('tower-height').textContent = run ? `LEVEL ${run.level}/${run.levels}` : `HEIGHT ${t.height}`;
-    $('tower-stage').textContent = run
-      ? `${compact(run.levelScore)}/${compact(run.quota)}`
-      : `STAGE ${t.stage}`;
-    $('tower-combo').textContent = t.combo > 1 ? `×${t.combo} COMBO` : '';
+    $('tower-height').textContent = `HEIGHT ${t.height}`;
+    $('tower-stage').textContent = `STAGE ${t.stage}`;
+    this.renderQuota();
+    const comboEl = $('tower-combo');
+    const wasCombo = comboEl.textContent;
+    comboEl.textContent = t.combo > 1 ? `×${t.combo} COMBO` : '';
+    // ink at 2, fully hot by 12 - the bar the colour is tracking is the combo
+    comboEl.style.setProperty('--heat', String(Math.min(1, Math.max(0, (t.combo - 1) / 11))));
+    if (comboEl.textContent && comboEl.textContent !== wasCombo) {
+      comboEl.classList.remove('tick');
+      void comboEl.offsetWidth;
+      comboEl.classList.add('tick');
+    }
+  }
+
+  // The quota is the single most important number in ASCENT, so it gets real
+  // size and a bar rather than a 0.64rem substat nobody reads.
+  renderQuota() {
+    const m = this.mirror;
+    const run = m.myRun();
+    const band = $('quota-band');
+    band.classList.toggle('hidden', !run);
+    if (!run) return;
+    const pct = Math.min(100, (run.levelScore / Math.max(1, run.quota)) * 100);
+    $('quota-level').textContent = 'QUOTA';
+    $('quota-nums').innerHTML =
+      `<span class="have">${run.levelScore.toLocaleString('en-US')}</span>`
+      + `<span class="need"> / ${run.quota.toLocaleString('en-US')}</span>`;
+    const fill = $('quota-fill');
+    fill.style.width = `${pct}%`;
+    fill.classList.toggle('close', pct >= 80 && pct < 100);
+    band.classList.toggle('done', pct >= 100);
   }
 
   renderTowerInput() {
@@ -410,6 +450,7 @@ export class UI {
       const ch = m.input[c];
       t.textContent = ch ? ch.toUpperCase() : '';
       t.classList.toggle('filled', !!ch);
+      markRare(t, ch);
     }
     const dig = m.myDig();
     $('tower-input').classList.toggle('buried', !!dig);
@@ -480,18 +521,22 @@ export class UI {
     this.renderStrip();
     this.renderShop();
     this.renderStatusLine();
-    this.spawnFloat(`+${d.points.toLocaleString('en-US')}`, d.pid);
+    // 900 is roughly a plain word at level one; 20k is a heavily combo'd one
+    // deep in a run. log-scaled so the middle of that range still reads.
+    const mag = Math.max(0, Math.min(1, Math.log10(Math.max(1, d.points) / 700) / 1.5));
+    this.spawnFloat(`+${d.points.toLocaleString('en-US')}`, { mag });
     sfx.land(d.height);
     sfx.points();
     if (d.combo > 1 && d.combo % 5 === 0) {
-      this.spawnFloat(`×${d.combo}`, d.pid);
+      this.spawnFloat(`×${d.combo} COMBO`, { mag: 0.85, tint: 'var(--hot)' });
       sfx.combo(d.combo);
     }
   }
 
   onTowerMiss(d) {
-    if (d.spared) this.showToast(`SCAFFOLD held — ${d.word.toUpperCase()} cost nothing`);
-    if (d.forced) this.showToast(`BLOOD PACT — ${d.word.toUpperCase()} built, a life spent`);
+    if (d.spared) this.showToast(`SCAFFOLD held — ${d.word.toUpperCase()} cost nothing`, 2600, 'bonus');
+    if (d.forced) this.showToast(`BLOOD PACT — ${d.word.toUpperCase()} built, a mark spent`, 2600, 'loss');
+    if (!d.spared) this.flashMark(d.pid);
     this.renderTowerHud();
     this.renderStrip();
     this.renderShop();
@@ -503,20 +548,33 @@ export class UI {
     sfx.crack();
   }
 
-  spawnFloat(text, pid) {
+  // `mag` is 0..1 and drives the size, so a big combo'd word arrives looking
+  // like one. `tint` overrides the default gold for combo and bonus flashes.
+  // the mark that just went, so the loss is felt rather than merely displayed
+  flashMark(pid) {
+    const el$ = document.querySelector(`[data-testid="lives-${pid}"]`);
+    if (!el$) return;
+    el$.classList.remove('lost');
+    void el$.offsetWidth;
+    el$.classList.add('lost');
+  }
+
+  spawnFloat(text, { mag = 0, tint = null } = {}) {
     const layer = $('float-layer');
-    const p = this.mirror.player(pid);
     const f = el('span', {
-      class: 'float-num',
+      class: 'float-num' + (mag > 0.6 ? ' big' : ''),
       text,
       style: {
-        left: `${16 + Math.random() * 58}%`,
-        top: `${22 + Math.random() * 42}%`,
-        '--sig': p ? p.color : 'currentColor',
+        left: `${14 + Math.random() * 56}%`,
+        // the lower half of the tower band, so a float rises through the stack
+        // rather than starting above it where the toast lives
+        top: `${44 + Math.random() * 30}%`,
+        '--mag': String(mag),
+        ...(tint ? { '--tint': tint } : {}),
       },
     });
     layer.append(f);
-    setTimeout(() => f.remove(), 1500);
+    setTimeout(() => f.remove(), 1600);
   }
 
   onDig(d) {
@@ -525,7 +583,7 @@ export class UI {
     if (d.phase === 'out') {
       this.showToast(d.by
         ? `${m.player(d.by)?.name || '???'} pulled ${who?.name || '???'} out`
-        : `${who?.name || '???'} dug out`);
+        : `${who?.name || '???'} dug out`, 2600, 'bonus');
       sfx.solve();
       this.tower3d.bless();
     } else if (!d.rejected) {
@@ -546,10 +604,10 @@ export class UI {
     this.renderStrip();
     this.renderTowerHud();
     if (d.reason === 'spelled') {
-      this.showToast('T-O-W-E-R — BONUS, a mark back for everyone');
+      this.showToast('T-O-W-E-R — BONUS, a mark back for everyone', 2600, 'bonus');
       sfx.bless();
     } else {
-      this.showToast(`BONUS — +1 mark for the team (floor ${d.height})`);
+      this.showToast(`BONUS — +1 mark for the team (floor ${d.height})`, 2600, 'bonus');
       sfx.heart();
     }
     this.tower3d.bless();

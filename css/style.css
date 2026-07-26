@@ -19,6 +19,16 @@
   --x: rgba(14, 14, 14, 0.30);
   --on-fill: #ffffff;
   --shadow: rgba(14, 14, 14, 0.18);
+
+  /* Semantic accents. Colour marks EVENTS AND VALUES here - points, combo, a
+     mark lost, a rare letter - never chrome. The page stays ink on paper; these
+     are the things you actually watch. Both themes carry their own values
+     because the light-theme gold is unreadable on black. */
+  --gain:  #b8860b;   /* points, score */
+  --hot:   #d1440a;   /* combo, climbing */
+  --loss:  #c2202c;   /* a mark spent */
+  --bonus: #12794f;   /* a mark back, a level cleared, a dig-out */
+  --rare:  #6a3bbf;   /* J Q X Z K */
 }
 
 :root[data-theme='dark'] {
@@ -36,6 +46,12 @@
   --x: rgba(243, 241, 236, 0.26);
   --on-fill: #080808;
   --shadow: rgba(0, 0, 0, 0.6);
+
+  --gain:  #f0c552;
+  --hot:   #ff7a3d;
+  --loss:  #ff5566;
+  --bonus: #3ddb92;
+  --rare:  #b98cff;
 }
 
 * { box-sizing: border-box; }
@@ -312,15 +328,42 @@ input, button { font-family: inherit; color: inherit; }
   line-height: 1;
   height: clamp(1.3rem, 7vw, 2rem);
 }
-.team-score.bump { animation: bump .34s cubic-bezier(.2, .9, .25, 1); }
-@keyframes bump { 0% { transform: scale(1); } 32% { transform: scale(1.11); } 100% { transform: scale(1); } }
+.team-score.bump { animation: bump .38s cubic-bezier(.2, .9, .25, 1); }
+@keyframes bump {
+  0%   { transform: scale(1); color: var(--ink); }
+  28%  { transform: scale(1.13); color: var(--gain); }
+  100% { transform: scale(1); color: var(--ink); }
+}
 
 /* Every text band on the game screen gets an explicit height. Different glyphs
    (♥ vs —, empty vs "×2 COMBO", bold vs regular) produce different line boxes,
    and any of that would nudge the tower and keyboard by a fraction of a pixel. */
 .tower-substats { display: flex; gap: 1rem; font-size: .64rem; line-height: 1rem; height: 1rem; letter-spacing: .18em; color: var(--ink-2); }
 .rpg-stat { line-height: 1rem; height: 1rem; overflow: hidden; }
-.combo-stat { color: var(--ink); font-weight: 700; min-width: 6rem; }
+/* the combo runs from ink to hot as it climbs - --heat is set from the count */
+.combo-stat {
+  color: color-mix(in srgb, var(--hot) calc(var(--heat, 0) * 100%), var(--ink));
+  font-weight: 700;
+  min-width: 6rem;
+}
+.combo-stat.tick { animation: combo-tick .3s cubic-bezier(.2, .9, .25, 1); }
+@keyframes combo-tick { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
+.quota-band { width: 100%; display: flex; flex-direction: column; gap: .18rem; }
+.quota-line { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.quota-level { font-size: .62rem; letter-spacing: .2em; color: var(--ink-2); }
+.quota-nums { font-size: .86rem; font-weight: 700; letter-spacing: .04em; }
+.quota-nums .have { color: var(--gain); }
+.quota-nums .need { color: var(--ink-3); }
+.quota-bar { width: 100%; height: 7px; border: 1px solid var(--rule); overflow: hidden; }
+#quota-fill {
+  height: 100%; width: 0;
+  background: var(--gain);
+  transition: width .32s cubic-bezier(.2, .9, .25, 1);
+}
+#quota-fill.close { animation: quota-close .7s ease-in-out infinite; }
+@keyframes quota-close { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+.quota-band.done #quota-fill { background: var(--bonus); }
 
 .hunger-bar {
   width: 100%; height: 4px;
@@ -332,7 +375,7 @@ input, button { font-family: inherit; color: inherit; }
   background: var(--ink);
   transition: width .1s linear;
 }
-#hunger-fill.starving { animation: starve .42s steps(2, end) infinite; }
+#hunger-fill.starving { background: var(--loss); animation: starve .42s steps(2, end) infinite; }
 @keyframes starve { 50% { opacity: .25; } }
 #hunger-fill.paused {
   background: repeating-linear-gradient(90deg, var(--ink) 0 6px, transparent 6px 12px);
@@ -359,8 +402,15 @@ input, button { font-family: inherit; color: inherit; }
 .strip-p.gone { opacity: .22; text-decoration: line-through; }
 .strip-name { font-size: .55rem; line-height: .8rem; height: .8rem; letter-spacing: .1em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strip-score { font-size: .78rem; line-height: 1rem; height: 1rem; font-weight: 700; letter-spacing: .04em; }
-.strip-marks.digging { color: var(--ink-3); }
-.strip-marks { font-size: .58rem; line-height: .8rem; height: .8rem; overflow: hidden; letter-spacing: .08em; color: var(--sig, var(--ink)); }
+.strip-marks.digging { color: var(--loss); }
+.strip-marks .spent { color: var(--ink-3); }
+.strip-marks.lost { animation: mark-lost .5s ease-out; }
+@keyframes mark-lost {
+  0%, 100% { transform: none; }
+  15% { transform: translateX(-3px) scale(1.25); color: var(--loss); }
+  45% { transform: translateX(3px); color: var(--loss); }
+}
+.strip-marks { font-size: .62rem; line-height: .8rem; height: .8rem; overflow: hidden; letter-spacing: .14em; color: var(--ink); }
 
 /* ================= THE TOWER (CSS 3D) ================= */
 .t3d-stage {
@@ -453,6 +503,9 @@ input, button { font-family: inherit; color: inherit; }
   padding: 0 .45rem 0 .55rem;
   gap: .06em;
 }
+.t3d-glyph[data-rare] { color: var(--rare); }
+.tower-tile[data-rare] { color: var(--rare); border-color: var(--rare); }
+.key[data-rare] { color: var(--rare); }
 .t3d-glyph {
   flex: none;
   width: 1.15em;
@@ -560,19 +613,30 @@ input, button { font-family: inherit; color: inherit; }
 .float-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .float-num {
   position: absolute;
-  font-size: .84rem;
+  /* --mag is 0..1 from the size of the number, so a big combo'd word LOOKS
+     like one. This is the RPG payoff; it should be hard to miss. */
+  font-size: calc(1.15rem + var(--mag, 0) * 1.35rem);
   font-weight: 700;
-  letter-spacing: .06em;
-  color: var(--sig, var(--ink));
-  animation: float-num 1.4s cubic-bezier(.2, .9, .25, 1) forwards;
+  letter-spacing: .02em;
+  color: var(--tint, var(--gain));
+  /* a paper backing, because a float can land on top of a slab and gold on
+     white is unreadable without one */
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  padding: .05em .3em;
+  border-radius: 2px;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--tint, var(--gain)) 40%, transparent);
+  animation: float-num 1.5s cubic-bezier(.16, 1.02, .3, 1) forwards;
   pointer-events: none;
   white-space: nowrap;
+  z-index: 5;
 }
 @keyframes float-num {
-  0%   { opacity: 0; transform: translateY(10px) scale(.85); }
-  18%  { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(-58px) scale(1); }
+  0%   { opacity: 0; transform: translateY(16px) scale(.6) rotate(-3deg); }
+  16%  { opacity: 1; transform: translateY(0) scale(1.12) rotate(1deg); }
+  30%  { transform: translateY(-4px) scale(1); rotate: 0deg; }
+  100% { opacity: 0; transform: translateY(-72px) scale(1.02); }
 }
+.float-num.big { letter-spacing: .04em; -webkit-text-stroke: .5px var(--tint, var(--gain)); }
 
 /* ---------- tiles / rescue grid ---------- */
 .tile {
@@ -697,6 +761,8 @@ input, button { font-family: inherit; color: inherit; }
 }
 .picker-target.on { background: var(--ink); color: var(--paper); }
 
+.toast.loss { background: var(--loss); color: #fff; }
+.toast.bonus { background: var(--bonus); color: #fff; }
 .toast {
   position: fixed;
   left: 50%; bottom: 5.6rem;
@@ -713,6 +779,8 @@ input, button { font-family: inherit; color: inherit; }
 }
 /* During a run the bottom of the screen is all keyboard, so the toast moves up
    and speaks over the tower itself. */
+/* between the roster strip and the top of the stack: clear of the marks
+   above it and of the floats below it */
 .toast.over-tower { bottom: auto; top: 38%; }
 .toast.pop { animation: toast-in .26s cubic-bezier(.2, .9, .25, 1); }
 @keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }

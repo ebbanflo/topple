@@ -108,6 +108,16 @@
         <span id="tower-stage" class="rpg-stat">STAGE 1</span>
         <span id="tower-combo" class="rpg-stat combo-stat"></span>
       </div>
+      <!-- ASCENT only. Absent entirely in CLASSIC/DAILY, which is safe because
+           mode is fixed at start: the contract is that nothing moves DURING a
+           run, not that every mode has the same layout. -->
+      <div id="quota-band" class="quota-band hidden">
+        <div class="quota-line">
+          <span id="quota-level" class="quota-level">QUOTA</span>
+          <span id="quota-nums" class="quota-nums">0 / 0</span>
+        </div>
+        <div class="quota-bar"><div id="quota-fill"></div></div>
+      </div>
       <div id="hunger-bar" class="hunger-bar" title="the timer"><div id="hunger-fill"></div></div>
       <!-- fixed-height status line, visibility-toggled so the band it occupies
            is reserved whether or not anyone is buried (see the layout contract) -->
