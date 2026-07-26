@@ -1,4 +1,4 @@
-// Boss decrees: a rule that warps a whole storey, on top of whatever decree the
+// Boss decrees: a rule that warps a whole level, on top of whatever decree the
 // team drafted. ASCENT only.
 //
 // The plan called for teaching matchesConstraint() a context argument so these
@@ -14,7 +14,7 @@
 //
 //   constraint  a plain decree, merged into the drafted one (stateless)
 //   check       (word, ctx) -> rejection reason or null (stateful)
-//   toll        (word) -> true if the word places but costs a life
+//   toll        (word) -> true if the word places but costs a mark
 //   solo        one player at a time, rotating
 //   hungerMul   scales the shared clock
 
@@ -30,13 +30,13 @@ export const BOSSES = {
   censor: {
     name: 'THE CENSOR',
     short: 'NO E',
-    desc: 'the letter E is forbidden for the whole storey',
+    desc: 'the letter E is forbidden for the whole level',
     constraint: { ban: ['e'] },
   },
   glutton: {
     name: 'THE GLUTTON',
     short: 'HALF CLOCK',
-    desc: 'the tower hungers twice as fast',
+    desc: 'the timer runs twice as fast',
     hungerMul: 0.5,
   },
   twin: {
@@ -44,7 +44,7 @@ export const BOSSES = {
     short: 'SHARE 2',
     desc: 'every word shares exactly two letters with the floor below it',
     check: (word, ctx) => {
-      if (!ctx.below) return null; // the first floor of a storey has nothing to echo
+      if (!ctx.below) return null; // the first floor of a level has nothing to echo
       const n = sharedLetters(word, ctx.below);
       return n === 2 ? null : `shares ${n} letters with ${ctx.below.toUpperCase()}, needs 2`;
     },
@@ -52,22 +52,22 @@ export const BOSSES = {
   tax: {
     name: 'THE TAX',
     short: 'CHEAP WORDS BLEED',
-    desc: 'a word worth less than 6 in letters is built, and costs a life',
+    desc: 'a word worth less than 6 in letters is built, and costs a mark',
     toll: (word) => letterValue(word) < 6,
   },
   silence: {
     name: 'THE SILENCE',
     short: 'ONE VOICE',
-    desc: 'one mason at a time — the tower listens to one voice, then the next',
+    desc: 'one player at a time — the tower takes one voice, then the next',
     solo: true,
   },
 };
 
 export const BOSS_IDS = Object.keys(BOSSES);
 
-// Storeys 3, 6 and the finale. Everything else is an ordinary climb.
-export function isBossStorey(storey, storeys) {
-  return storey % 3 === 0 || storey === storeys;
+// Levels 3, 6 and the finale. Everything else is an ordinary climb.
+export function isBossLevel(level, levels) {
+  return level % 3 === 0 || level === levels;
 }
 
 export function pickBoss(seen = [], rng = Math.random) {

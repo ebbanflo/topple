@@ -197,7 +197,7 @@ export function describeConstraint(c) {
 // whatever relics the placing player holds.
 //
 // Two halves, which is what the HUD shows and what relics attach to:
-//   STONE  the word     base + letter values, then relic stone / stoneMul
+//   BASE  the word     base + letter values, then relic base / baseMul
 //   MULT   the run      stage x combo, then relic mult (+) and xmult (x)
 //
 // ONE implementation, deliberately: an earlier draft had a separate relic-aware
@@ -211,9 +211,9 @@ export function scoreBreakdown(word, ctx = {}) {
   const combo = ctx.combo ?? 0;
 
   const letters = [...word].reduce((s, ch) => s + (LETTER_VALUES[ch] || 1), 0);
-  let stone = TOWER.base + letters * TOWER.perLetterValue;
-  for (const r of held) if (r.stone) stone += r.stone(word, ctx) || 0;
-  for (const r of held) if (r.stoneMul) stone *= r.stoneMul(word, ctx) ?? 1;
+  let base = TOWER.base + letters * TOWER.perLetterValue;
+  for (const r of held) if (r.base) base += r.base(word, ctx) || 0;
+  for (const r of held) if (r.baseMul) base *= r.baseMul(word, ctx) ?? 1;
 
   let mult = 1 + TOWER.comboPct * combo;
   for (const r of held) if (r.mult) mult += (r.mult(word, ctx) || 0) / stage;
@@ -221,9 +221,9 @@ export function scoreBreakdown(word, ctx = {}) {
 
   // grouped exactly as the original formula was, so the no-relic case is
   // bit-for-bit what CLASSIC has always paid
-  const raw = stone * stage * mult;
+  const raw = base * stage * mult;
   return {
-    stone: Math.round(stone),
+    base: Math.round(base),
     mult: Math.round(stage * mult * 100) / 100,
     points: Math.round(raw / 10) * 10,
   };

@@ -101,16 +101,6 @@ body { transition: background .28s ease, color .28s ease; }
 @keyframes screen-in { from { opacity: 0; transform: translateY(8px); } }
 
 /* ---------- typographic furniture ---------- */
-.slug {
-  font-size: .68rem;
-  letter-spacing: .22em;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  align-self: flex-start;
-  border-bottom: 1px solid var(--rule-soft);
-  width: 100%;
-  padding-bottom: .35rem;
-}
 
 .mono-line { font-size: .9rem; color: var(--ink-2); letter-spacing: .05em; text-align: center; }
 
@@ -270,7 +260,18 @@ input, button { font-family: inherit; color: inherit; }
    height, and the tower alone absorbs whatever space is left. */
 #scr-game { gap: .4rem; padding-top: .4rem; justify-content: flex-start; overflow: hidden; }
 .game-header { width: 100%; display: flex; align-items: flex-end; gap: .6rem; }
-.hdr-slug { flex: 1; align-self: auto; font-size: .56rem; padding-bottom: .15rem; }
+.hdr-status {
+  flex: 1;
+  font-size: .62rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule-soft);
+  padding-bottom: .2rem;
+  height: 1.1rem;
+  line-height: .9rem;
+  overflow: hidden;
+}
 .hdr-btns { display: flex; gap: .3rem; padding-bottom: .3rem; }
 
 .decree {
@@ -358,8 +359,8 @@ input, button { font-family: inherit; color: inherit; }
 .strip-p.gone { opacity: .22; text-decoration: line-through; }
 .strip-name { font-size: .55rem; line-height: .8rem; height: .8rem; letter-spacing: .1em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strip-score { font-size: .78rem; line-height: 1rem; height: 1rem; font-weight: 700; letter-spacing: .04em; }
-.strip-hearts.digging { color: var(--ink-3); }
-.strip-hearts { font-size: .58rem; line-height: .8rem; height: .8rem; overflow: hidden; letter-spacing: .08em; color: var(--sig, var(--ink)); }
+.strip-marks.digging { color: var(--ink-3); }
+.strip-marks { font-size: .58rem; line-height: .8rem; height: .8rem; overflow: hidden; letter-spacing: .08em; color: var(--sig, var(--ink)); }
 
 /* ================= THE TOWER (CSS 3D) ================= */
 .t3d-stage {

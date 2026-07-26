@@ -13,26 +13,26 @@ served straight off GitHub Pages, with Supabase Realtime carrying the room.
 
 **CLASSIC** — the endless game. Climb until everyone is buried.
 
-**ASCENT** — the structured run. Eight **storeys**, each demanding a score
+**ASCENT** — the structured run. Eight **levels**, each demanding a score
 **quota**. Meet it and the tower holds while the team catches its breath —
-everyone gets a heart back, anyone buried is lifted out, and you bank **mortar**.
-Then the next storey asks for more. There is deliberately no second clock: the
-hunger bar is the pressure, and you fail a storey by getting buried, not by
+everyone gets a heart back, anyone buried is lifted out, and you bank **coins**.
+Then the next level asks for more. There is deliberately no second clock: the
+hunger bar is the pressure, and you fail a level by getting buried, not by
 running out of turns. Clear the eighth and the tower is **crowned** — the only
 way to actually win.
 
-Storeys **3, 6 and 8** bring a **boss decree** — a rule that warps the whole
-storey on top of whatever the team drafted. **THE CENSOR** forbids the letter E.
+Levels **3, 6 and 8** bring a **boss decree** — a rule that warps the whole
+level on top of whatever the team drafted. **THE CENSOR** forbids the letter E.
 **THE GLUTTON** halves the clock. **THE TWIN** demands every word share exactly
 two letters with the floor below. **THE TAX** builds cheap words anyway and takes
 a life for them. **THE SILENCE** hands the tower one voice at a time.
 
 At each intermission every player is dealt **three relics of their own**, bought
-from the team's shared **mortar** — so the room has to decide whose build is
+from the team's shared **coins** — so the room has to decide whose build is
 worth funding. Five each, for the whole run. Some are plain numbers; the
 interesting ones are trades: **GREED** multiplies your score and starves the
 tower ten seconds sooner, **PATIENCE** does the reverse, **KEYSTONE** lets you
-reuse words still standing, **BLOOD MORTAR** builds a decree-breaking word
+reuse words still standing, **BLOOD PACT** builds a decree-breaking word
 anyway and takes a life for it, **INSURANCE** catches the first collapse.
 
 **DAILY** — the same tower for everybody, everywhere, all day. Decrees are dealt
@@ -83,7 +83,7 @@ Host-authoritative, with a thin mirror on every client.
 
 | file | role |
 | --- | --- |
-| `js/engine.js` | Runs **only in the host's browser**. Owns every life, score, combo and the hunger clock, and judges every word — as stone if you're standing, as rubble if you're buried. |
+| `js/engine.js` | Runs **only in the host's browser**. Owns every life, score, combo and the hunger clock, and judges every word — as base if you're standing, as rubble if you're buried. |
 | `js/client.js` | `Mirror` — the state every peer (host included) renders from. Asserts at startup that it handles every host broadcast in the registry. |
 | `js/protocol.js` | The single registry of wire events. Adding a host event without a mirror handler throws immediately. |
 | `js/transport.js` | Swappable transport: Supabase Realtime broadcast + presence, or `BroadcastChannel` for tests (`?t=local`). |
@@ -134,8 +134,8 @@ decrees, so the seed itself never crosses the wire.
 
 ### Scoring
 
-One implementation, in `decree.js`. A word is worth `STONE x MULT`: stone is the
-word (base + letter values, then relic `stone` / `stoneMul`), mult is the run
+One implementation, in `decree.js`. A word is worth `BASE x MULT`: base is the
+word (base + letter values, then relic `base` / `baseMul`), mult is the run
 around it (stage x combo, then relic `mult` and `xmult`). `wordPoints()` — the
 CLASSIC path — is a call into the same breakdown with an empty relic list.
 
@@ -160,14 +160,14 @@ than replacing it.
 
 ### Tuning ASCENT
 
-The quota curve in `js/config.js` (`storeyQuota`, driven by `ASCENT.quotaBase`
+The quota curve in `js/config.js` (`levelQuota`, driven by `ASCENT.quotaBase`
 and `ASCENT.quotaGrowth`) is a starting point and expected to move. A word is
 worth roughly 900–1,700 early on and several times that once stage and combo
 climb, so the honest way to tune it is to play it. `?debug=1` exposes
-`setStorey(n)` so the eighth storey can be tested without grinding the first
-seven. For reference, storey 1 currently falls in about seven words.
+`setLevel(n)` so the eighth level can be tested without grinding the first
+seven. For reference, level 1 currently falls in about seven words.
 
-Mortar earn rate (`ASCENT.mortarBase` plus overshoot and hearts in hand) and
+Coins earn rate (`ASCENT.coinsBase` plus overshoot and hearts in hand) and
 relic prices in `relics.js` want the same treatment.
 
 ### Infrastructure

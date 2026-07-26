@@ -32,7 +32,7 @@ test.describe('relics', () => {
       expect(['common', 'uncommon', 'rare'], id).toContain(r.rarity);
       expect(r.price, id).toBeGreaterThan(0);
       // it must actually DO something: score, or override a rule
-      const doesSomething = !!(r.stone || r.stoneMul || r.mult || r.xmult
+      const doesSomething = !!(r.base || r.baseMul || r.mult || r.xmult
         || r.freeMiss || r.allowDuplicate || r.forcePlace || r.insures || r.hungerDelta);
       expect(doesSomething, `${id} does nothing`).toBe(true);
       // rarer costs more, roughly
@@ -45,8 +45,8 @@ test.describe('relics', () => {
     const base = scoreBreakdown('crane', { stage: 1, combo: 1 });
     // CRANE has two vowels
     const tithe = scoreBreakdown('crane', { stage: 1, combo: 1, relics: ['vowel_tithe'] });
-    expect(tithe.stone).toBe(base.stone + 80);
-    expect(tithe.mult).toBe(base.mult); // stone relics must not touch mult
+    expect(tithe.base).toBe(base.base + 80);
+    expect(tithe.mult).toBe(base.mult); // base relics must not touch mult
 
     // PUPPY has a repeated letter, CRANE does not
     const helixOn = scoreBreakdown('puppy', { stage: 2, combo: 0, relics: ['double_helix'] });
@@ -76,7 +76,7 @@ test.describe('relics', () => {
 
     // PATIENCE pays for its extra time in stone
     const patient = scoreBreakdown('crane', { stage: 1, combo: 0, relics: ['patience'] });
-    expect(patient.stone).toBe(Math.round(scoreBreakdown('crane', { stage: 1, combo: 0 }).stone * 0.8));
+    expect(patient.base).toBe(Math.round(scoreBreakdown('crane', { stage: 1, combo: 0 }).base * 0.8));
   });
 
   test('the hunger clock bends to EVERY player\'s relics, and has a floor', () => {

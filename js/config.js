@@ -22,15 +22,17 @@ export const MAX_PLAYERS = 4;
 export const WORD_LEN = 5;
 
 // TOWER (the whole game): co-op, 1-4 players, endless. Stack valid words under
-// an escalating DECREE. Misses cost lives; the hunger clock keeps the team
-// moving; scores are RPG-huge on purpose.
+// an escalating DECREE. Mistakes cost marks; the timer keeps the team moving;
+// scores are RPG-huge on purpose.
 export const TOWER = {
-  lives: 3,
-  maxLives: 5,             // cap for bonus hearts (milestones/easter eggs)
-  // Being at zero lives is BURIED, not out: you keep typing, and words that
+  // MARKS, not lives. Two, and two is also the ceiling: a bonus is a heal, not
+  // a stockpile, so a team at full marks gains nothing from one.
+  lives: 2,
+  maxLives: 2,
+  // Being at zero marks is BURIED, not out: you keep typing, and words that
   // obey the decree dig you out instead of building the tower.
   digWords: 3,             // decree-obeying words needed to climb out
-  digReturnLives: 1,       // you come back with this many
+  digReturnLives: 1,       // you come back with this many marks
   ropeCost: 2000,          // a teammate can buy away ONE of those words
   // Words needed per decree before it escalates - host-set directly (see
   // DECREE_CHOICES below), independent of the DIFFICULTY setting.
@@ -44,7 +46,7 @@ export const TOWER = {
   perLetterValue: 50,      // * scrabble-ish letter value
   comboPct: 0.1,           // * combo count, multiplicative
   minWordsPerDecree: 4,    // decree floor before rampWords is factored in (see tower.js genConstraint)
-  heartEveryHeight: 10,    // team-wide bonus heart every N floors climbed
+  bonusEveryHeight: 10,    // team-wide bonus mark every N floors climbed
   // How many of the newest floors are mounted in the 3D scene at once.
   // Load-bearing in TWO places kept in sync: tower3d.js renders the last
   // `visibleRows`, AND the engine's duplicate-word rule only rejects words
@@ -85,23 +87,23 @@ export const DIFFICULTY_CHOICES = ['easy', 'medium', 'hard', 'ramp'];
 export const MODE_CHOICES = ['classic', 'ascent', 'daily'];
 export const DAILY_SETTINGS = { difficulty: 'ramp', rampWords: 5, hungerMs: TOWER.hungerMs };
 
-// ASCENT: the structured run. Each storey sets a score quota; clear it and the
-// tower holds while the team catches its breath, then the next storey demands
+// ASCENT: the structured run. Each level sets a score quota; clear it and the
+// tower holds while the team catches its breath, then the next level demands
 // more. Clear the last one and the tower is crowned - the game's only win.
 //
 // The curve below is a STARTING POINT and expected to move: a word is worth
 // roughly 900-1,700 early on and several times that once stage and combo climb,
-// so the honest way to tune this is to play it. `?debug=1` exposes setStorey()
-// so nobody has to grind eight storeys to test the eighth.
+// so the honest way to tune this is to play it. `?debug=1` exposes setLevel()
+// so nobody has to grind eight levels to test the eighth.
 export const ASCENT = {
-  storeys: 8,
+  levels: 8,
   quotaBase: 8000,
   quotaGrowth: 1.6,
   clearLives: 1,      // a heart back for everyone at each intermission
-  mortarBase: 4,      // currency earned per storey, before bonuses
+  coinsBase: 4,      // currency earned per level, before bonuses
 };
 
-export function storeyQuota(n) {
+export function levelQuota(n) {
   return Math.round(ASCENT.quotaBase * (ASCENT.quotaGrowth ** (n - 1)) / 100) * 100;
 }
 

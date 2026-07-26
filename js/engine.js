@@ -5,7 +5,7 @@
 
 import {
   MAX_PLAYERS, MIN_PLAYERS, WORD_LEN, DECREE_OPTIONS, MODE_CHOICES, DAILY_SETTINGS,
-  SHOP, DEFAULT_SETTINGS, PLAYER_COLORS, LEAVE_GRACE_MS, TOWER, ASCENT, storeyQuota,
+  SHOP, DEFAULT_SETTINGS, PLAYER_COLORS, LEAVE_GRACE_MS, TOWER, ASCENT, levelQuota,
 } from './config.js';
 import { EV, IN } from './protocol.js';
 import { isValidGuess } from './words.js';
@@ -15,7 +15,7 @@ import { mulberry32, hashSeed, dailyKey, dailyNumber } from './rng.js';
 import {
   RELICS, MAX_RELICS, REROLL_COST, dealRelics, grants, hungerFor,
 } from './relics.js';
-import { BOSSES, isBossStorey, pickBoss, mergeConstraints } from './bosses.js';
+import { BOSSES, isBossLevel, pickBoss, mergeConstraints } from './bosses.js';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard', 'ramp'];
 
@@ -192,17 +192,17 @@ export class Engine {
       rng: this.settings.mode === 'daily'
         ? mulberry32(hashSeed(dailyKey()))
         : Math.random,
-      // ASCENT only: the run's storey structure. null in CLASSIC/DAILY, which
+      // ASCENT only: the run's level structure. null in CLASSIC/DAILY, which
       // stay endless, so every branch below is a single `t.run &&` away.
       run: this.settings.mode === 'ascent'
         ? {
-          storey: 1, quota: storeyQuota(1), storeyScore: 0, mortar: 0, phase: 'climb',
+          level: 1, quota: levelQuota(1), levelScore: 0, coins: 0, phase: 'climb',
           relics: Object.fromEntries(this.activePlayers().map((p) => [p.id, []])),
           offers: {},
-          placed: new Set(),     // who has landed a word this storey (CHORUS)
-          freeMiss: {},          // who has spent their SCAFFOLD this storey
+          placed: new Set(),     // who has landed a word this level (CHORUS)
+          freeMiss: {},          // who has spent their SCAFFOLD this level
           insured: false,        // INSURANCE fires once per run
-          boss: null,            // the storey-long rule, on boss storeys
+          boss: null,            // the level-long rule, on boss levels
           bossSeen: [],          // so a run doesn't repeat one until it must
           voice: null,           // THE SILENCE: whose turn it is
         }
@@ -238,18 +238,18 @@ export class Engine {
   runInfo() {
     const r = this.tower && this.tower.run;
     return r ? {
-      storey: r.storey, quota: r.quota, storeyScore: r.storeyScore,
-      mortar: r.mortar, phase: r.phase, storeys: ASCENT.storeys,
+      level: r.level, quota: r.quota, levelScore: r.levelScore,
+      coins: r.coins, phase: r.phase, levels: ASCENT.levels,
       relics: Object.fromEntries(Object.entries(r.relics).map(([k, v]) => [k, [...v]])),
       boss: r.boss, voice: r.voice,
     } : null;
   }
 
-  // ---------- ASCENT: storeys ----------
-  // A storey ends when its quota is met, never on a separate timer. The hunger
+  // ---------- ASCENT: levels ----------
+  // A level ends when its quota is met, never on a separate timer. The hunger
   // clock is already the pressure; a second failure clock would just punish the
   // same mistake twice.
-  completeStorey() {
+  completeLevel() {
     const t = this.tower;
     const r = t.run;
     r.phase = 'intermission';
@@ -257,33 +257,33 @@ export class Engine {
     clearTimeout(this.timers.draft);
     t.offer = null;
 
-    // clearing a storey buys everyone a breath: a heart back, and anyone
+    // clearing a level buys everyone a breath: a mark back, and anyone
     // buried is lifted out by it
     for (const p of this.activePlayers()) {
       t.lives[p.id] = Math.min(TOWER.maxLives, (t.lives[p.id] ?? 0) + ASCENT.clearLives);
     }
     this.syncBuried();
 
-    // overshooting the quota pays, and so does finishing with hearts in hand
-    const over = Math.max(0, r.storeyScore - r.quota);
+    // overshooting the quota pays, and so does finishing with marks in hand
+    const over = Math.max(0, r.levelScore - r.quota);
     const lives = this.activePlayers().reduce((n, p) => n + (t.lives[p.id] ?? 0), 0);
-    const earned = ASCENT.mortarBase + Math.floor((over / r.quota) * 4) + lives;
-    r.mortar += earned;
+    const earned = ASCENT.coinsBase + Math.floor((over / r.quota) * 4) + lives;
+    r.coins += earned;
 
-    // deal each player their own three; the mortar to buy them is shared, so
+    // deal each player their own three; the coins to buy them is shared, so
     // the team has to decide whose build is worth funding
     r.offers = {};
     for (const p of this.activePlayers()) {
       r.offers[p.id] = dealRelics(r.relics[p.id] || [], 3, t.rng);
     }
 
-    const last = r.storey >= ASCENT.storeys;
+    const last = r.level >= ASCENT.levels;
     this.net.emit(EV.INTERMISSION, {
-      storey: r.storey, quota: r.quota, storeyScore: r.storeyScore,
-      mortar: r.mortar, earned, lives: { ...t.lives }, last,
+      level: r.level, quota: r.quota, levelScore: r.levelScore,
+      coins: r.coins, earned, lives: { ...t.lives }, last,
       offers: { ...r.offers }, relics: this.runInfo().relics,
       // so the table can warn you what you're buying relics FOR
-      nextBoss: last ? null : this.previewBoss(r.storey + 1),
+      nextBoss: last ? null : this.previewBoss(r.level + 1),
     });
     if (last) this.timers.next = setTimeout(() => this.crown(), 1200);
   }
@@ -292,15 +292,15 @@ export class Engine {
     const t = this.tower;
     if (!t || !t.run || t.run.phase !== 'intermission' || this.over) return;
     if (from !== this.hostId) return; // the host calls time on the intermission
-    this.nextStorey();
+    this.nextLevel();
   }
 
-  nextStorey() {
+  nextLevel() {
     const t = this.tower;
     const r = t.run;
-    r.storey += 1;
-    r.quota = storeyQuota(r.storey);
-    r.storeyScore = 0;
+    r.level += 1;
+    r.quota = levelQuota(r.level);
+    r.levelScore = 0;
     r.phase = 'climb';
     r.placed = new Set();
     r.freeMiss = {};
@@ -308,14 +308,14 @@ export class Engine {
     this.assignBoss();
     t.constraint = genConstraint(
       t.stage, t.used, t.difficulty, t.rampWords, t.constraint, t.rng);
-    this.broadcastTower({ storeyStart: r.storey });
+    this.broadcastTower({ levelStart: r.level });
     this.armHunger();
   }
 
   broadcastRelics(extra = {}) {
     const r = this.tower.run;
     this.net.emit(EV.RELICS, {
-      relics: this.runInfo().relics, mortar: r.mortar, offers: { ...r.offers }, ...extra,
+      relics: this.runInfo().relics, coins: r.coins, offers: { ...r.offers }, ...extra,
     });
   }
 
@@ -331,8 +331,8 @@ export class Engine {
     const own = r.relics[from] || (r.relics[from] = []);
     if (own.includes(id)) return fail('Already held');
     if (own.length >= MAX_RELICS) return fail(`Only ${MAX_RELICS} relics fit`);
-    if (r.mortar < relic.price) return fail(`Need ${relic.price} mortar`);
-    r.mortar -= relic.price;
+    if (r.coins < relic.price) return fail(`Need ${relic.price} coins`);
+    r.coins -= relic.price;
     own.push(id);
     r.offers[from] = offer.filter((x) => x !== id);
     this.broadcastRelics({ bought: id, by: from });
@@ -343,16 +343,16 @@ export class Engine {
     const r = t && t.run;
     const fail = (reason) => this.net.emit(EV.SHOP_ERR, { to: from, reason });
     if (!r || r.phase !== 'intermission' || this.over) return;
-    if (r.mortar < REROLL_COST) return fail(`Need ${REROLL_COST} mortar`);
-    r.mortar -= REROLL_COST;
+    if (r.coins < REROLL_COST) return fail(`Need ${REROLL_COST} coins`);
+    r.coins -= REROLL_COST;
     r.offers[from] = dealRelics(r.relics[from] || [], 3, t.rng);
     this.broadcastRelics({ rerolled: from });
   }
 
-  // What storey n+1 will bring, without consuming any randomness - the actual
+  // What level n+1 will bring, without consuming any randomness - the actual
   // pick happens in assignBoss(). Only the fact that there IS one is promised.
-  previewBoss(storey) {
-    return isBossStorey(storey, ASCENT.storeys) ? 'boss' : null;
+  previewBoss(level) {
+    return isBossLevel(level, ASCENT.levels) ? 'boss' : null;
   }
 
   assignBoss() {
@@ -360,13 +360,13 @@ export class Engine {
     const r = t.run;
     r.boss = null;
     r.voice = null;
-    if (!isBossStorey(r.storey, ASCENT.storeys)) return;
+    if (!isBossLevel(r.level, ASCENT.levels)) return;
     r.boss = pickBoss(r.bossSeen, t.rng);
     r.bossSeen.push(r.boss);
     const b = BOSSES[r.boss];
     if (b.solo) r.voice = (this.activePlayers()[0] || {}).id || null;
     this.net.emit(EV.BOSS, {
-      id: r.boss, name: b.name, short: b.short, desc: b.desc, storey: r.storey,
+      id: r.boss, name: b.name, short: b.short, desc: b.desc, level: r.level,
     });
   }
 
@@ -390,7 +390,7 @@ export class Engine {
       reason: 'the tower stands',
       won: true,
       winner: standings[0] ? standings[0].id : null,
-      height: t.height, stage: t.stage, storey: t.run.storey,
+      height: t.height, stage: t.stage, level: t.run.level,
       standings: standings.map((p) => ({ id: p.id, name: p.name, color: p.color, score: p.score, alive: p.alive })),
     });
   }
@@ -461,8 +461,8 @@ export class Engine {
 
   // `lives` is the single source of truth; burial is derived from it. Call this
   // after ANY change to lives and the two can never disagree - which is what
-  // makes bonus hearts, hunger strikes and digs all compose without special
-  // cases (a heart that lifts someone off zero un-buries them for free).
+  // makes bonus marks, timer strikes and digs all compose without special
+  // cases (a mark that lifts someone off zero un-buries them for free).
   syncBuried() {
     const t = this.tower;
     const out = [];
@@ -512,16 +512,18 @@ export class Engine {
     return false;
   }
 
-  // Team-wide bonus heart (milestone every N floors, or the T-O-W-E-R easter
-  // egg). Lifts anyone currently buried straight out - "everyone gets a heart"
-  // is literal, including whoever is at zero.
-  grantHearts(reason) {
+  // Team-wide bonus mark (milestone every N floors, or the T-O-W-E-R easter
+  // egg). Lifts anyone currently buried straight out - "everyone gets a mark"
+  // is literal, including whoever is at zero. Capped at TOWER.maxLives, which
+  // is now the STARTING count, so a team at full marks gains nothing: the bonus
+  // is a heal, not a stockpile.
+  grantMark(reason) {
     const t = this.tower;
     for (const p of this.activePlayers()) {
       const cur = t.lives[p.id] ?? 0;
       t.lives[p.id] = Math.min(TOWER.maxLives, cur + 1);
     }
-    const freed = this.syncBuried(); // a heart lifts the buried straight out
+    const freed = this.syncBuried(); // a mark lifts the buried straight out
     this.net.emit(EV.TOWER_BONUS, { reason, lives: { ...t.lives }, height: t.height, freed });
   }
 
@@ -565,7 +567,7 @@ export class Engine {
     if (this.towerOnScreen(word) && !grants(mine, 'allowDuplicate')) {
       return this.towerMiss(from, word, 'already in the tower');
     }
-    // BLOOD MORTAR builds the illegal word anyway and takes the life for it -
+    // BLOOD PACT builds the illegal word anyway and takes the life for it -
     // a miss that becomes a floor, which is the whole trade.
     let bled = false;
     if (!matchesConstraint(word, this.liveConstraint())) {
@@ -590,14 +592,14 @@ export class Engine {
     p.score += points;
     t.rows.push({ pid: from, word, points });
     if (t.rows.length > 60) t.rows.shift();
-    if (t.run) { t.run.storeyScore += points; t.run.placed.add(from); }
+    if (t.run) { t.run.levelScore += points; t.run.placed.add(from); }
     t.lastWordAt = now();
     // rotate BEFORE the broadcast so the new voice rides along with the word,
     // rather than needing a whole tower snapshot to travel
     if (boss && boss.solo) this.rotateVoice();
     this.net.emit(EV.TOWER_WORD, {
       pid: from, word, points, height: t.height, combo: t.combo, stage: t.stage,
-      storeyScore: t.run ? t.run.storeyScore : undefined,
+      levelScore: t.run ? t.run.levelScore : undefined,
       voice: t.run ? t.run.voice : undefined,
     });
     this.armHunger();
@@ -615,18 +617,18 @@ export class Engine {
       if (this.everyoneBuried()) { this.endTower(); return; }
     }
 
-    if (Math.floor(t.height / TOWER.heartEveryHeight) > Math.floor((t.height - 1) / TOWER.heartEveryHeight)) {
-      this.grantHearts('milestone');
+    if (Math.floor(t.height / TOWER.bonusEveryHeight) > Math.floor((t.height - 1) / TOWER.bonusEveryHeight)) {
+      this.grantMark('milestone');
     }
     if (this.checkTowerSpelled()) {
-      this.grantHearts('spelled');
+      this.grantMark('spelled');
     }
 
     // A draft already in flight holds the stage where it is - the team can keep
     // climbing under the old decree while they decide.
-    // Quota first: clearing a storey supersedes any decree change it collides
+    // Quota first: clearing a level supersedes any decree change it collides
     // with, and the intermission would cancel a draft anyway.
-    if (t.run && t.run.storeyScore >= t.run.quota) { this.completeStorey(); return; }
+    if (t.run && t.run.levelScore >= t.run.quota) { this.completeLevel(); return; }
 
     if (t.wordsInStage >= t.rampWords && !t.offer) {
       t.stage += 1;
@@ -643,7 +645,7 @@ export class Engine {
     const below = t.rows.length ? t.rows[t.rows.length - 1].word : null;
     return scoreWord(word, {
       relics: t.run.relics[pid] || [],
-      stage: t.stage, combo: t.combo, height: t.height, storey: t.run.storey,
+      stage: t.stage, combo: t.combo, height: t.height, level: t.run.level,
       sinceLastMs: t.lastWordAt ? now() - t.lastWordAt : null,
       placedCount: t.run.placed.size, livingCount: this.activePlayers().length,
       below,
@@ -652,7 +654,7 @@ export class Engine {
 
   towerMiss(from, word, reason) {
     const t = this.tower;
-    // SCAFFOLD eats the first miss of each storey, once per player
+    // SCAFFOLD eats the first miss of each level, once per player
     if (t.run && grants(t.run.relics[from] || [], 'freeMiss') && !t.run.freeMiss[from]) {
       t.run.freeMiss[from] = true;
       t.combo = 0;
@@ -710,7 +712,7 @@ export class Engine {
   }
 
   // Buried input. Same verb as the rest of the game - a real word under the
-  // live decree - but it moves rubble instead of stone: no score, no height,
+  // live decree - but it moves rubble instead of base: no score, no height,
   // no combo, and a failed attempt costs nothing (you are already at zero).
   onDigGuess(word, from) {
     const t = this.tower;
@@ -755,7 +757,7 @@ export class Engine {
       winner: standings[0] ? standings[0].id : null,
       height: t.height,
       stage: t.stage,
-      storey: t.run ? t.run.storey : null,
+      level: t.run ? t.run.level : null,
       standings: standings.map((p) => ({ id: p.id, name: p.name, color: p.color, score: p.score, alive: p.alive })),
     });
   }
@@ -828,7 +830,7 @@ export class Engine {
     // left standing.
     if (this.tower) {
       delete this.tower.buried[pid];
-      // a departing voice must not freeze the storey for everyone else
+      // a departing voice must not freeze the level for everyone else
       if (this.tower.run && this.tower.run.voice === pid) {
         this.rotateVoice();
         this.broadcastTower();
@@ -881,14 +883,14 @@ export class Engine {
   }
 
   // ---------- debug hooks (?debug=1 only; used by the E2E suite) ----------
-  // Jump the run forward so the eighth storey can be tested without playing
+  // Jump the run forward so the eighth level can be tested without playing
   // the first seven. ?debug=1 only.
-  _debugSetStorey(n) {
+  _debugSetLevel(n) {
     const t = this.tower;
     if (!t || !t.run) return;
-    t.run.storey = Math.max(1, Math.min(ASCENT.storeys, Number(n) || 1));
-    t.run.quota = storeyQuota(t.run.storey);
-    t.run.storeyScore = 0;
+    t.run.level = Math.max(1, Math.min(ASCENT.levels, Number(n) || 1));
+    t.run.quota = levelQuota(t.run.level);
+    t.run.levelScore = 0;
     t.run.phase = 'climb';
     this.broadcastTower();
     this.armHunger();

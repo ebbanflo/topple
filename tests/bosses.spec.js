@@ -2,7 +2,7 @@
 
 import { test, expect } from '@playwright/test';
 import { GUESSES } from '../data/guesses.js';
-import { BOSSES, BOSS_IDS, isBossStorey, pickBoss, mergeConstraints } from '../js/bosses.js';
+import { BOSSES, BOSS_IDS, isBossLevel, pickBoss, mergeConstraints } from '../js/bosses.js';
 import { matchesConstraint, describeConstraint } from '../js/decree.js';
 import { mulberry32 } from '../js/rng.js';
 import { ASCENT } from '../js/config.js';
@@ -19,11 +19,11 @@ test.describe('boss decrees', () => {
     expect(BOSS_IDS.length).toBeGreaterThanOrEqual(5);
   });
 
-  test('boss storeys are every third, plus the finale', () => {
+  test('boss levels are every third, plus the finale', () => {
     const hit = [];
-    for (let n = 1; n <= ASCENT.storeys; n++) if (isBossStorey(n, ASCENT.storeys)) hit.push(n);
+    for (let n = 1; n <= ASCENT.levels; n++) if (isBossLevel(n, ASCENT.levels)) hit.push(n);
     expect(hit).toEqual([3, 6, 8]);
-    expect(isBossStorey(1, 8)).toBe(false);
+    expect(isBossLevel(1, 8)).toBe(false);
   });
 
   test('a run works through fresh bosses before repeating one', () => {

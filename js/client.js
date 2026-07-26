@@ -153,7 +153,7 @@ export class Mirror {
     t.height = d.height;
     t.combo = d.combo;
     t.stage = d.stage;
-    if (t.run && d.storeyScore != null) t.run.storeyScore = d.storeyScore;
+    if (t.run && d.levelScore != null) t.run.levelScore = d.levelScore;
     if (t.run && d.voice !== undefined) t.run.voice = d.voice;
     t.hungerAt = now() + t.hungerMs;
     const p = this.player(d.pid);
@@ -184,7 +184,7 @@ export class Mirror {
     t.combo = 0;
     t.hungerAt = now() + t.hungerMs;
     this.syncBuried();
-    this.showToast('THE TOWER HUNGERS — everyone bleeds');
+    this.showToast('OUT OF TIME — everyone loses a mark');
     this.fire('towerhunger', d);
   }
 
@@ -210,8 +210,8 @@ export class Mirror {
     if (!t) return;
     if (t.run) {
       t.run.phase = 'intermission';
-      t.run.mortar = d.mortar;
-      t.run.storeyScore = d.storeyScore;
+      t.run.coins = d.coins;
+      t.run.levelScore = d.levelScore;
     }
     if (d.lives) { t.lives = d.lives; this.syncBuried(); }
     t.offer = null;
@@ -224,7 +224,7 @@ export class Mirror {
     const t = this.tower;
     if (!t || !t.run) return;
     t.run.relics = d.relics || t.run.relics;
-    t.run.mortar = d.mortar;
+    t.run.coins = d.coins;
     t.run.offers = d.offers || {};
     this.fire('relics', d);
   }

@@ -15,7 +15,7 @@ export const IN = {
   BUY: 'buy',           // {item, target?}
   QUIT: 'quit',         // {} (sender leaves; host handles + mirrors)
   DECREE_PICK: 'pick',  // {index} choose one of the offered decrees
-  READY: 'ready',       // {} ASCENT: leave the intermission, start the next storey
+  READY: 'ready',       // {} ASCENT: leave the intermission, start the next level
   RELIC_PICK: 'relic',  // {id} ASCENT: buy one of your offered relics
   REROLL: 'reroll',     // {} ASCENT: pay to redeal your own three
   RESYNC: 'resyncreq',  // {} ask host for a full snapshot
@@ -29,17 +29,17 @@ export const EV = {
   SCORES: 'scores',      // {scores, buyer?, item?}
   SHOP_ERR: 'shoperr',   // {to, reason}
   DECREE_OFFER: 'offer', // {stage, options:[constraint], ms} pick one, first pick wins
-  INTERMISSION: 'inter', // ASCENT: {storey, quota, storeyScore, mortar, earned, last, offers, relics}
-  RELICS: 'relics',      // ASCENT: {relics:{pid:[id]}, mortar, offers:{pid:[id]}, bought?, by?}
-  BOSS: 'boss',          // ASCENT: {id, name, short, desc, storey} a storey-long rule
+  INTERMISSION: 'inter', // ASCENT: {level, quota, levelScore, coins, earned, last, offers, relics}
+  RELICS: 'relics',      // ASCENT: {relics:{pid:[id]}, coins, offers:{pid:[id]}, bought?, by?}
+  BOSS: 'boss',          // ASCENT: {id, name, short, desc, level} a level-long rule
   TOWER: 'twr',          // {stage, constraint, height, hungerMs, lives, scores, combo, pickedBy?}
   TOWER_WORD: 'twrword', // {pid, word, points, height, combo, stage}
   TOWER_MISS: 'twrmiss', // {pid, word, reason, lives, combo}
   TOWER_HUNGER: 'twrhunger', // {lives, downed}
   DIG: 'dig',            // {phase:'buried'|'clear'|'out', pid, cleared, need, word?, by?, lives?}
-  TOWER_BONUS: 'twrbonus',   // {reason:'milestone'|'spelled', lives, height} - team-wide heart
+  TOWER_BONUS: 'twrbonus',   // {reason:'milestone'|'spelled', lives, height} - team-wide mark
   PLAYER_LEFT: 'left',   // {pid}
-  GAME_OVER: 'gameover', // {standings, winner, reason, height, stage, won?, storey?}
+  GAME_OVER: 'gameover', // {standings, winner, reason, height, stage, won?, level?}
   ROOM_DEAD: 'roomdead', // {} host is closing the room
   RESYNC: 'resync',      // {to, snapshot}
 };

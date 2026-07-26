@@ -21,7 +21,6 @@
 
   <!-- ============ MAIN MENU ============ -->
   <section id="scr-menu" class="screen">
-    <div class="slug">FADE IN:</div>
     <h1 class="big-title" aria-label="TOPPLE"></h1>
     <p class="tagline">stack words. obey the decree. 1&ndash;4 players. it falls eventually.</p>
     <div class="menu-box">
@@ -49,7 +48,6 @@
 
   <!-- ============ LOBBY ============ -->
   <section id="scr-lobby" class="screen hidden">
-    <div class="slug">INT. THE TOWER &mdash; PRE-PRODUCTION</div>
     <h2 class="room-label">ROOM</h2>
     <div id="room-code" class="room-code" title="room code"></div>
     <button id="btn-share" class="btn-ghost">COPY INVITE LINK</button>
@@ -93,7 +91,7 @@
   <!-- ============ GAME ============ -->
   <section id="scr-game" class="screen hidden">
     <header class="game-header">
-      <div id="hdr-slug" class="slug hdr-slug">INT. THE TOWER &mdash; CONTINUOUS</div>
+      <div id="hdr-status" class="hdr-status"></div>
       <div class="hdr-btns">
         <button id="btn-pause" class="icon-btn" title="Pause (privacy screen)">II</button>
         <button id="btn-help" class="icon-btn" title="How to play">?</button>
@@ -110,7 +108,7 @@
         <span id="tower-stage" class="rpg-stat">STAGE 1</span>
         <span id="tower-combo" class="rpg-stat combo-stat"></span>
       </div>
-      <div id="hunger-bar" class="hunger-bar" title="the tower hungers"><div id="hunger-fill"></div></div>
+      <div id="hunger-bar" class="hunger-bar" title="the timer"><div id="hunger-fill"></div></div>
       <!-- fixed-height status line, visibility-toggled so the band it occupies
            is reserved whether or not anyone is buried (see the layout contract) -->
       <div id="status-line" class="status-line inactive"></div>
@@ -130,19 +128,18 @@
 
   <!-- ============ INTERMISSION (ASCENT) ============ -->
   <section id="scr-inter" class="screen hidden">
-    <div class="slug">INT. THE SCAFFOLD &mdash; LATER</div>
-    <h2 id="inter-title" class="over-title">STOREY CLEARED</h2>
+    <h2 id="inter-title" class="over-title">LEVEL CLEARED</h2>
     <p id="inter-sub" class="over-sub"></p>
     <div class="inter-figures">
       <div class="inter-fig"><span id="inter-score" class="inter-num">0</span><span class="inter-label">SCORED</span></div>
       <div class="inter-fig"><span id="inter-quota" class="inter-num">0</span><span class="inter-label">QUOTA</span></div>
-      <div class="inter-fig"><span id="inter-mortar" class="inter-num">0</span><span class="inter-label">MORTAR</span></div>
+      <div class="inter-fig"><span id="inter-coins" class="inter-num">0</span><span class="inter-label">COINS</span></div>
     </div>
     <p id="inter-earned" class="inter-earned"></p>
 
     <div id="shop-box" class="shop-box hidden">
       <div class="shop-head">
-        <span class="shop-title">THE ARCHITECT'S TABLE</span>
+        <span class="shop-title">SHOP</span>
         <button id="btn-reroll" class="btn-ghost">REROLL &middot; 2</button>
       </div>
       <div id="relic-offers" class="relic-offers"></div>
@@ -150,13 +147,12 @@
       <p id="relic-team" class="relic-team"></p>
     </div>
 
-    <button id="btn-next-storey" class="btn-big hidden">NEXT STOREY</button>
+    <button id="btn-next-level" class="btn-big hidden">NEXT LEVEL</button>
     <p id="inter-wait" class="lobby-wait hidden">waiting for the host…</p>
   </section>
 
   <!-- ============ GAME OVER ============ -->
   <section id="scr-over" class="screen hidden">
-    <div class="slug">EXT. THE RUBBLE &mdash; DAY</div>
     <h2 id="over-title" class="over-title"></h2>
     <p id="over-sub" class="over-sub"></p>
     <ol id="standings" class="standings"></ol>
@@ -167,7 +163,6 @@
 
   <!-- ============ ROOM DEAD / FATAL ============ -->
   <section id="scr-dead" class="screen hidden">
-    <div class="slug">CUT TO BLACK.</div>
     <p id="dead-msg" class="mono-line"></p>
     <button id="btn-dead-menu" class="btn-big">&larr; BACK TO MENU</button>
   </section>
@@ -202,21 +197,21 @@
       <p>Each floor scores base &times; letter values &times; <b>stage</b>, inflated by your
       <b>combo</b> (every consecutive good word, team-wide). Numbers are meant to be absurd.</p>
       <h3>ASCENT</h3>
-      <p>The structured run. Eight <b>storeys</b>, each demanding a score <b>quota</b>. Meet it and
+      <p>The structured run. Eight <b>levels</b>, each demanding a score <b>quota</b>. Meet it and
       the tower holds while you catch your breath &mdash; everyone gets a heart back, anyone buried
-      is lifted out, and you bank <b>mortar</b>. Then the next storey asks for more. There's no
-      second clock: the hunger bar is the pressure, and you fail a storey by getting buried, not by
+      is lifted out, and you bank <b>coins</b>. Then the next level asks for more. There's no
+      second clock: the hunger bar is the pressure, and you fail a level by getting buried, not by
       running out of turns. Clear the eighth and the tower is <b>crowned</b> &mdash; the only way to
       actually win.</p>
       <h3>RELICS</h3>
       <p>At every intermission each player is dealt <b>three relics</b> of their own, bought with
-      the team's shared <b>mortar</b> &mdash; so the room has to decide whose build is worth funding.
+      the team's shared <b>coins</b> &mdash; so the room has to decide whose build is worth funding.
       Up to five each, for the whole run. Some are plain numbers (<b>VOWEL TITHE</b>,
       <b>RARE EARTH</b>); the interesting ones are trades. <b>GREED</b> multiplies your score and
       starves the tower ten seconds sooner. <b>PATIENCE</b> does the reverse. <b>KEYSTONE</b> lets
-      you reuse words still standing. <b>BLOOD MORTAR</b> builds a decree-breaking word anyway and
+      you reuse words still standing. <b>BLOOD PACT</b> builds a decree-breaking word anyway and
       takes a life for it. <b>INSURANCE</b> catches the first collapse. Rerolling your three costs
-      2 mortar.</p>
+      2 coins.</p>
       <h3>DAILY</h3>
       <p>Same tower for everybody, everywhere, all day. The decrees are dealt from the date rather
       than from chance, and the settings are locked so the runs are actually comparable &mdash;

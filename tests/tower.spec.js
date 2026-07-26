@@ -77,7 +77,7 @@ test.describe('topple', () => {
     expect(t.stage).toBe(1);
     expect(t.height).toBe(0);
     const hostId = await host.evaluate(() => window.__topple.selfId);
-    expect(t.lives[hostId]).toBe(3);
+    expect(t.lives[hostId]).toBe(2); // two marks, and two is also the ceiling
     await expect(host.locator('#tower-scene')).toBeVisible();
     await expect(host.locator('#decree')).not.toHaveText('');
 
@@ -102,12 +102,11 @@ test.describe('topple', () => {
     await climb(host, w2);
     await host.waitForFunction(() => window.__topple.state().tower.stage === 2, null, { polling: 100 });
 
-    // misses: not-a-word, duplicate, decree-breaker - one life each
-    await miss(host, 'zzzzz');
-    await miss(host, w1); // already in the tower
-    t = await towerState(host);
-    const breaker = findNonMatching(t.constraint, [w1, w2]);
-    await miss(host, breaker); // life 3 gone -> solo team downed -> the tower falls
+    // mistakes cost a mark each, and there are only two. A third kind of
+    // mistake is proven separately below rather than by taking a third mark.
+    await miss(host, 'zzzzz');          // not a word
+    await miss(host, w1);               // already in the tower
+    // both marks gone -> solo player buried -> nobody left standing -> it falls
     await host.waitForFunction(() => window.__topple.state().over, null, { polling: 100 });
     const over = (await state(host)).gameover;
     expect(over.reason).toBe('the tower fell');
@@ -135,7 +134,6 @@ test.describe('topple', () => {
     // A flames out: three bad words -> buried, NOT out
     await miss(pA, 'zzzzz');
     await miss(pA, 'qqqqq');
-    await miss(pA, 'jjjjj');
     await pA.waitForFunction(() => !!window.__topple.state().tower.buried[window.__topple.selfId],
       null, { polling: 100 });
     await expect(host.locator(`[data-testid="lives-${aId}"]`)).toHaveText('0/3');
@@ -170,23 +168,26 @@ test.describe('topple', () => {
     await climb(pA, words[4]);
     expect((await towerState(pA)).height).toBe(heightBefore + 1);
 
-    // hunger: silence bleeds every living player
+    // the timer: silence costs every standing player a mark
     await host.evaluate(() => { window.__topple.engine.tower.hungerMs = 900; });
-    await climb(host, words[5]); // re-arms the hunger clock at 900ms
+    await climb(host, words[5]); // re-arms the clock at 900ms
     await host.waitForFunction(([h, a]) => {
       const lv = window.__topple.state().tower.lives;
-      return lv[h] === 2 && lv[a] === 0;
-    }, [hostId, aId], { polling: 100 });
-
-    // everyone buried at once -> the tower falls
+      return lv[h] === 1 && lv[a] === 0; // host 2->1, the dug-out player 1->0
+    }, [hostId, aId], { polling: 50 });
+    // stop the clock, so the ending below is driven by the mistake and not by
+    // a second strike landing underneath it
     await host.evaluate(() => { window.__topple.engine.tower.hungerMs = 600000; });
-    await miss(host, 'zzzzz');
-    await miss(host, 'qqqqq');
+
+    // the host spends their last mark -> nobody standing -> the tower falls.
+    // Submitted rather than miss()'d: if the clock did get one more strike in,
+    // the run is already over and miss() would wait forever for a mark to drop.
+    await host.evaluate(() => window.__topple.guess('zzzzz'));
     await host.waitForFunction(() => window.__topple.state().over, null, { polling: 100 });
     expect((await state(host)).gameover.reason).toBe('the tower fell');
   });
 
-  test('bonus hearts: every 10th floor lifts a buried teammate out; capped at max', async ({ context }) => {
+  test('bonus marks: every 10th floor lifts a buried teammate out, and is a no-op at full marks', async ({ context }) => {
     test.setTimeout(120000);
     const host = await openPage(context);
     const code = await hostGame(host, 'PRIEST', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -201,10 +202,9 @@ test.describe('topple', () => {
     // no decree noise: any distinct dictionary word is acceptable
     await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
-    // A flames out completely (3 misses) while the tower keeps climbing
+    // A flames out completely while the tower keeps climbing
     await miss(pA, 'zzzzz');
     await miss(pA, 'qqqqq');
-    await miss(pA, 'jjjjj');
     await pA.waitForFunction(() => !!window.__topple.state().tower.buried[window.__topple.selfId],
       null, { polling: 100 });
     expect((await towerState(host)).lives[aId]).toBe(0);
@@ -224,13 +224,15 @@ test.describe('topple', () => {
     await host.waitForFunction(() => window.__topple.state().tower.height === 10, null, { polling: 100 });
     // the milestone lifted the buried teammate out...
     await pA.waitForFunction((id) => window.__topple.state().tower.lives[id] === 1, aId, { polling: 100 });
-    // ...and the host (who never lost a life) gained one too, capped by maxLives
+    // ...and did NOTHING for the host, who was already at full marks. That is
+    // the point of capping at the starting count: a bonus is a heal, not a
+    // stockpile, so it only pays when somebody has actually taken a hit.
     const hostId = await host.evaluate(() => window.__topple.selfId);
     let t = await towerState(host);
-    expect(t.lives[hostId]).toBe(4); // 3 start + 1 milestone
+    expect(t.lives[hostId]).toBe(2); // unchanged - already full
     expect(t.lives[aId]).toBe(1);    // 0 -> lifted out to 1
 
-    // grind to height 50 (5 milestones) to prove the cap holds
+    // grind to height 50 (5 milestones) to prove the ceiling really holds
     const usedSoFar = new Set(await usedWords(host));
     const more = GUESSES.filter((w) => /^[a-z]{5}$/.test(w) && !usedSoFar.has(w)).slice(0, 60);
     let extra = 0;
@@ -244,10 +246,10 @@ test.describe('topple', () => {
     }
     t = await towerState(host);
     expect(t.height).toBeGreaterThanOrEqual(50);
-    expect(t.lives[hostId]).toBe(5); // capped at maxLives, not 8
+    expect(t.lives[hostId]).toBe(2); // five milestones later, still two
   });
 
-  test('the tower blessing: spelling TOWER down a column grants a bonus heart', async ({ context }) => {
+  test('the T-O-W-E-R easter egg gives a mark back', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
     await hostGame(host, 'BARD', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -264,9 +266,13 @@ test.describe('topple', () => {
     expect(towerWords.every(Boolean)).toBe(true);
     expect(new Set(towerWords).size).toBe(5);
 
+    // spend a mark first: at full marks the bonus is deliberately a no-op, so
+    // there would be nothing to observe
+    await miss(host, 'zzzzz');
     for (const w of towerWords.slice(0, 4)) await climb(host, w);
     let t = await towerState(host);
     const before = t.lives[hostId];
+    expect(before).toBe(1);
     expect(t.height).toBe(4); // not a height-10 milestone - isolates the easter egg
 
     await climb(host, towerWords[4]);
@@ -290,7 +296,7 @@ test.describe('topple', () => {
     await waitTower(host); await waitTower(pA);
     await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
-    await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); await miss(pA, 'jjjjj');
+    await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); // two marks is all it takes
     await pA.waitForFunction(() => !!window.__topple.state().tower.buried[window.__topple.selfId],
       null, { polling: 100 });
 
@@ -329,7 +335,7 @@ test.describe('topple', () => {
     await waitTower(host); await waitTower(pA);
     await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
-    await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); await miss(pA, 'jjjjj');
+    await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); // two marks is all it takes
     await pA.waitForFunction(() => !!window.__topple.state().tower.buried[window.__topple.selfId],
       null, { polling: 100 });
 
@@ -566,7 +572,7 @@ test.describe('topple', () => {
     expect(runs[0].opener).toBe(runs[1].opener);
     expect(runs[0].offer).toEqual(runs[1].offer);
     // and the run is labelled so people can compare
-    await expect(runs[0].page.locator('#hdr-slug')).toContainText('THE TOWER #');
+    await expect(runs[0].page.locator('#hdr-status')).toContainText('TOWER #');
   });
 
   test('CLASSIC does not deal the same tower twice', async ({ context }) => {
@@ -583,7 +589,7 @@ test.describe('topple', () => {
     expect(new Set(openers).size).toBeGreaterThan(1);
   });
 
-  test('ASCENT: a storey quota opens an intermission, and the next storey demands more', async ({ context }) => {
+  test('ASCENT: a level quota opens an intermission, and the next level demands more', async ({ context }) => {
     test.setTimeout(90000);
     const host = await openPage(context);
     const code = await hostGame(host, 'FOREMAN', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -601,15 +607,15 @@ test.describe('topple', () => {
     await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
     const run0 = (await towerState(host)).run;
-    expect(run0.storey).toBe(1);
-    expect(run0.storeys).toBe(8);
+    expect(run0.level).toBe(1);
+    expect(run0.levels).toBe(8);
     expect(run0.quota).toBeGreaterThan(0);
-    expect(run0.storeyScore).toBe(0);
-    await expect(host.locator('#tower-height')).toContainText('STOREY 1/8');
+    expect(run0.levelScore).toBe(0);
+    await expect(host.locator('#tower-height')).toContainText('LEVEL 1/8');
 
-    // the guest loses a life first, so we can prove the intermission hands one back
+    // the guest spends a mark first, so we can prove the intermission hands it back
     await miss(guest, 'zzzzz');
-    expect((await towerState(host)).lives[aId]).toBe(2);
+    expect((await towerState(host)).lives[aId]).toBe(1);
 
     // climb until the quota falls
     const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 40);
@@ -627,13 +633,13 @@ test.describe('topple', () => {
       await page.waitForSelector('#scr-inter:not(.hidden)');
     }
     const inter = (await state(host)).intermission;
-    expect(inter.storey).toBe(1);
-    expect(inter.storeyScore).toBeGreaterThanOrEqual(inter.quota);
+    expect(inter.level).toBe(1);
+    expect(inter.levelScore).toBeGreaterThanOrEqual(inter.quota);
     expect(inter.earned).toBeGreaterThan(0);
-    expect(inter.mortar).toBe(inter.earned);
-    await expect(host.locator('#inter-title')).toContainText('STOREY 1 CLEARED');
-    // clearing a storey hands a heart back
-    expect((await towerState(host)).lives[aId]).toBe(3);
+    expect(inter.coins).toBe(inter.earned);
+    await expect(host.locator('#inter-title')).toContainText('LEVEL 1 CLEARED');
+    // clearing a level hands a mark back, up to the ceiling
+    expect((await towerState(host)).lives[aId]).toBe(2);
     // and the tower is genuinely stopped: words do not land
     const heightAtStop = (await towerState(host)).height;
     await host.evaluate(() => window.__topple.guess('crane'));
@@ -642,25 +648,25 @@ test.describe('topple', () => {
     expect(await host.evaluate(() => window.__topple.state().inputLocked)).toBe(true);
 
     // only the host calls time
-    await expect(guest.locator('#btn-next-storey')).toBeHidden();
+    await expect(guest.locator('#btn-next-level')).toBeHidden();
     await expect(guest.locator('#inter-wait')).toBeVisible();
     await guest.evaluate(() => window.__topple.ready()); // ignored
     await host.waitForTimeout(200);
     expect((await towerState(host)).run.phase).toBe('intermission');
 
-    await host.click('#btn-next-storey');
+    await host.click('#btn-next-level');
     for (const page of [host, guest]) {
       await page.waitForFunction(() => window.__topple.state().tower.run.phase === 'climb',
         null, { polling: 100 });
       await page.waitForSelector('#scr-game:not(.hidden)');
     }
     const run1 = (await towerState(host)).run;
-    expect(run1.storey).toBe(2);
-    expect(run1.quota).toBeGreaterThan(run0.quota); // storey two asks for more
-    expect(run1.storeyScore).toBe(0);
+    expect(run1.level).toBe(2);
+    expect(run1.quota).toBeGreaterThan(run0.quota); // level two asks for more
+    expect(run1.levelScore).toBe(0);
   });
 
-  test('ASCENT: clearing the last storey crowns the tower instead of dropping it', async ({ context }) => {
+  test('ASCENT: clearing the last level wins instead of dropping the tower', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
     await hostGame(host, 'CAPSTONE', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -669,13 +675,13 @@ test.describe('topple', () => {
     await waitTower(host);
     await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
-    // jump to the final storey and shrink its quota — this test is about the
+    // jump to the final level and shrink its quota — this test is about the
     // crown, not the curve (which is a playtest question)
     await host.evaluate(() => {
-      window.__topple.setStorey(8);
+      window.__topple.setLevel(8);
       window.__topple.engine.tower.run.quota = 1000;
     });
-    expect((await towerState(host)).run.storey).toBe(8);
+    expect((await towerState(host)).run.level).toBe(8);
 
     const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 8);
     for (const w of words) {
@@ -688,14 +694,14 @@ test.describe('topple', () => {
     const over = (await state(host)).gameover;
     expect(over.won).toBe(true);
     expect(over.reason).toBe('the tower stands');
-    expect(over.storey).toBe(8);
+    expect(over.level).toBe(8);
     await host.waitForSelector('#scr-over:not(.hidden)');
-    await expect(host.locator('#over-title')).toContainText('CROWNED');
-    // a crowned tower is NOT demolished on the way to the podium
+    await expect(host.locator('#over-title')).toContainText('YOU WIN');
+    // a winning tower is NOT demolished on the way to the podium
     await expect(host.locator('#tower-scene')).not.toHaveClass(/collapsing/);
   });
 
-  test('CLASSIC has no storeys at all', async ({ context }) => {
+  test('CLASSIC has no levels at all', async ({ context }) => {
     const host = await openPage(context);
     await hostGame(host, 'ENDLESS', { ...FAST, rampWords: 999, hungerMs: 600000 });
     await host.click('#btn-start');
@@ -704,7 +710,7 @@ test.describe('topple', () => {
     await expect(host.locator('#tower-height')).toContainText('HEIGHT');
   });
 
-  test('ASCENT shop: buying a relic costs mortar and measurably changes scoring', async ({ context }) => {
+  test('ASCENT shop: buying a relic costs coins and measurably changes scoring', async ({ context }) => {
     test.setTimeout(90000);
     const host = await openPage(context);
     await hostGame(host, 'PATRON', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -713,7 +719,7 @@ test.describe('topple', () => {
     await waitTower(host);
     await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
 
-    // clear storey one to reach the table
+    // clear level one to reach the table
     const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 40);
     for (const w of words) {
       if ((await towerState(host)).run.phase !== 'climb') break;
@@ -727,17 +733,17 @@ test.describe('topple', () => {
     // force a known, affordable relic into the offer so the assertion is exact
     await host.evaluate(() => {
       const r = window.__topple.engine.tower.run;
-      r.mortar = 40;
+      r.coins = 40;
       r.offers[window.__topple.selfId] = ['vowel_tithe', 'greed', 'keystone'];
       window.__topple.engine.broadcastRelics();
     });
-    await host.waitForFunction(() => window.__topple.state().tower.run.mortar === 40, null, { polling: 50 });
+    await host.waitForFunction(() => window.__topple.state().tower.run.coins === 40, null, { polling: 50 });
 
     await host.click('[data-testid="relic-vowel_tithe"]');
     await host.waitForFunction(() => window.__topple.state().tower.run
       .relics[window.__topple.selfId].includes('vowel_tithe'), null, { polling: 50 });
     // the price came out of the shared pool, and it left the shelf
-    expect((await towerState(host)).run.mortar).toBe(40 - RELICS.vowel_tithe.price);
+    expect((await towerState(host)).run.coins).toBe(40 - RELICS.vowel_tithe.price);
     await expect(host.locator('[data-testid="relic-vowel_tithe"]')).toHaveCount(0);
     // buying it twice is impossible
     await host.evaluate(() => window.__topple.mirror.pickRelic('vowel_tithe'));
@@ -746,13 +752,13 @@ test.describe('topple', () => {
       .toEqual(['vowel_tithe']);
 
     // a reroll costs, and redeals
-    const before = (await towerState(host)).run.mortar;
+    const before = (await towerState(host)).run.coins;
     await host.click('#btn-reroll');
-    await host.waitForFunction((n) => window.__topple.state().tower.run.mortar === n - 2,
+    await host.waitForFunction((n) => window.__topple.state().tower.run.coins === n - 2,
       before, { polling: 50 });
 
     // back to the tower - and the relic is doing arithmetic
-    await host.click('#btn-next-storey');
+    await host.click('#btn-next-level');
     await host.waitForFunction(() => window.__topple.state().tower.run.phase === 'climb',
       null, { polling: 50 });
     await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
@@ -782,7 +788,7 @@ test.describe('topple', () => {
       window.__topple.engine.broadcastTower();
     });
 
-    // SCAFFOLD: the first miss of the storey costs nothing...
+    // SCAFFOLD: the first miss of the level costs nothing...
     const lives0 = (await towerState(host)).lives[hostId];
     await host.evaluate(() => window.__topple.guess('zzzzz'));
     await host.waitForTimeout(300);
@@ -800,7 +806,7 @@ test.describe('topple', () => {
     expect((await towerState(host)).lives[hostId]).toBe(lives0 - 1); // no penalty
   });
 
-  test('boss storeys: THE CENSOR enforces on top of the drafted decree', async ({ context }) => {
+  test('boss levels: THE CENSOR enforces on top of the drafted decree', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
     await hostGame(host, 'CENSORED', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -820,7 +826,7 @@ test.describe('topple', () => {
       null, { polling: 50 });
     await expect(host.locator('#decree')).toContainText('NO E');
     await expect(host.locator('#decree')).toHaveClass(/boss/);
-    await expect(host.locator('#hdr-slug')).toContainText('THE CENSOR');
+    await expect(host.locator('#hdr-status')).toContainText('THE CENSOR');
 
     // a word obeying the DECREE but breaking the BOSS is refused, and says so
     const decreeOnly = GUESSES.find((w) => w.includes('t') && w.includes('e'));
@@ -838,7 +844,7 @@ test.describe('topple', () => {
     await miss(host, bossOnly);
   });
 
-  test('boss storeys: THE TAX builds the word and takes a life for it', async ({ context }) => {
+  test('boss levels: THE TAX builds the word and takes a life for it', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
     await hostGame(host, 'TAXMAN', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -870,7 +876,7 @@ test.describe('topple', () => {
     expect((await towerState(host)).lives[hostId]).toBe(lives1);
   });
 
-  test('boss storeys: THE SILENCE refuses out-of-turn words without punishing them', async ({ context }) => {
+  test('boss levels: THE SILENCE refuses out-of-turn words without punishing them', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
     const code = await hostGame(host, 'VOICE', { ...FAST, rampWords: 999, hungerMs: 600000 });
@@ -1155,7 +1161,7 @@ test.describe('topple', () => {
     const keyboardY = (page) => page.locator('#keyboard').evaluate((el) => el.offsetTop);
     const yBefore = await keyboardY(host);
 
-    await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); await miss(pA, 'jjjjj');
+    await miss(pA, 'zzzzz'); await miss(pA, 'qqqqq'); // two marks is all it takes
     await Promise.all([host, pA, pB].map((p) => p.waitForFunction((id) =>
       !!window.__topple.state().tower.buried[id], aId, { polling: 100 })));
 

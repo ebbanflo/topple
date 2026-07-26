@@ -1,7 +1,7 @@
 // Rendering + input. Renders exclusively from the Mirror; sends intents back
 // through it. The tower itself is delegated to tower3d.js.
 
-import { WORD_LEN, SHOP, DEFAULT_SETTINGS, STORE } from './config.js';
+import { WORD_LEN, SHOP, DEFAULT_SETTINGS, STORE, TOWER } from './config.js';
 import { describeConstraint, countRecognizable } from './decree.js';
 import { RELICS, MAX_RELICS, REROLL_COST } from './relics.js';
 import { BOSSES } from './bosses.js';
@@ -11,6 +11,7 @@ import { Tower3D } from './tower3d.js';
 
 const $ = (id) => document.getElementById(id);
 const KEY_ROWS = ['qwertyuiop', 'asdfghjkl', '⏎zxcvbnm⌫'];
+const MAX_MARKS = TOWER.maxLives;
 const COLLAPSE_MS = 2100; // let the tower actually fall before the podium
 
 // The substats band is fixed-width and fixed-height; quotas run to six figures,
@@ -166,7 +167,7 @@ export class UI {
     $('btn-pause').onclick = () => this.setPaused(true);
     $('btn-resume').onclick = () => this.setPaused(false);
     $('btn-picker-cancel').onclick = () => this.closePicker();
-    $('btn-next-storey').onclick = () => { this.mirror.ready(); sfx.ret(); };
+    $('btn-next-level').onclick = () => { this.mirror.ready(); sfx.ret(); };
     $('btn-reroll').onclick = () => this.mirror.reroll();
 
     document.addEventListener('keydown', (e) => {
@@ -336,8 +337,10 @@ export class UI {
       el('span', { class: 'strip-name', text: (p.id === m.selfId ? '▸ ' : '') + p.name }),
       el('span', { class: 'strip-score', 'data-testid': `score-${p.id}`, text: p.score.toLocaleString('en-US') }),
       lives ? el('span', {
-        class: 'strip-hearts' + (n > 0 ? '' : ' digging'), 'data-testid': `lives-${p.id}`,
-        text: n > 0 ? '♥'.repeat(n)
+        class: 'strip-marks' + (n > 0 ? '' : ' digging'), 'data-testid': `lives-${p.id}`,
+        // marks you still hold, then the ones you've spent - so the readout is
+        // a constant width and losing one is a visible change, not a shrink
+        text: n > 0 ? '◆'.repeat(n) + '◇'.repeat(Math.max(0, MAX_MARKS - n))
           : `${(m.tower.buried[p.id]?.cleared ?? 0)}/${m.digNeed()}`,
       }) : null));
     }
@@ -350,9 +353,9 @@ export class UI {
     this.closeDraft();
     this.show('scr-game');
     if (d && d.insured) this.tower3d.sync(m.tower.rows, (pid) => this.colorFor(pid));
-    if (d && d.storeyStart) {
+    if (d && d.levelStart) {
       this.tower3d.reset();
-      this.showToast(`STOREY ${d.storeyStart} — QUOTA ${compact(m.tower.run.quota)}`);
+      this.showToast(`LEVEL ${d.levelStart} — QUOTA ${compact(m.tower.run.quota)}`);
       sfx.stage();
     }
     const boss = m.tower.run && m.tower.run.boss ? BOSSES[m.tower.run.boss] : null;
@@ -364,11 +367,11 @@ export class UI {
     void $('decree').offsetWidth;
     $('decree').classList.add('swap');
     const bossNow = m.tower.run && m.tower.run.boss ? BOSSES[m.tower.run.boss] : null;
-    $('hdr-slug').textContent = m.tower.run
-      ? `INT. THE TOWER — STOREY ${m.tower.run.storey}/${m.tower.run.storeys}${bossNow ? ` · ${bossNow.name}` : ''}`
+    $('hdr-status').textContent = m.tower.run
+      ? `LEVEL ${m.tower.run.level} / ${m.tower.run.levels}${bossNow ? ` · ${bossNow.name}` : ''}`
       : m.daily
-        ? `INT. THE TOWER #${m.daily.n} — STAGE ${m.tower.stage}`
-        : `INT. THE TOWER — STAGE ${m.tower.stage}`;
+        ? `TOWER #${m.daily.n} · STAGE ${m.tower.stage}`
+        : `STAGE ${m.tower.stage}`;
     this.renderTowerHud();
     this.renderTowerInput();
     this.renderStrip();
@@ -393,9 +396,9 @@ export class UI {
     void scoreEl.offsetWidth;
     scoreEl.classList.add('bump');
     const run = t.run;
-    $('tower-height').textContent = run ? `STOREY ${run.storey}/${run.storeys}` : `HEIGHT ${t.height}`;
+    $('tower-height').textContent = run ? `LEVEL ${run.level}/${run.levels}` : `HEIGHT ${t.height}`;
     $('tower-stage').textContent = run
-      ? `${compact(run.storeyScore)}/${compact(run.quota)}`
+      ? `${compact(run.levelScore)}/${compact(run.quota)}`
       : `STAGE ${t.stage}`;
     $('tower-combo').textContent = t.combo > 1 ? `×${t.combo} COMBO` : '';
   }
@@ -488,7 +491,7 @@ export class UI {
 
   onTowerMiss(d) {
     if (d.spared) this.showToast(`SCAFFOLD held — ${d.word.toUpperCase()} cost nothing`);
-    if (d.forced) this.showToast(`BLOOD MORTAR — ${d.word.toUpperCase()} built, a life spent`);
+    if (d.forced) this.showToast(`BLOOD PACT — ${d.word.toUpperCase()} built, a life spent`);
     this.renderTowerHud();
     this.renderStrip();
     this.renderShop();
@@ -543,10 +546,10 @@ export class UI {
     this.renderStrip();
     this.renderTowerHud();
     if (d.reason === 'spelled') {
-      this.showToast('T-O-W-E-R — the tower blesses you. bonus hearts.');
+      this.showToast('T-O-W-E-R — BONUS, a mark back for everyone');
       sfx.bless();
     } else {
-      this.showToast(`+1 heart for the team (floor ${d.height})`);
+      this.showToast(`BONUS — +1 mark for the team (floor ${d.height})`);
       sfx.heart();
     }
     this.tower3d.bless();
@@ -570,26 +573,26 @@ export class UI {
     const m = this.mirror;
     this.closeDraft();
     this.show('scr-inter');
-    $('inter-title').textContent = d.last ? 'THE TOWER STANDS' : `STOREY ${d.storey} CLEARED`;
+    $('inter-title').textContent = d.last ? 'THE TOWER STANDS' : `LEVEL ${d.level} CLEARED`;
     // The engine promises only THAT a boss is coming, not which - naming it
     // here would consume the pick early and spoil the reveal.
     $('inter-sub').textContent = d.last
       ? 'nothing left to build'
       : d.nextBoss
-        ? `everyone takes a heart back — and something is waiting on storey ${d.storey + 1}`
-        : `everyone takes a heart back — storey ${d.storey + 1} wants more`;
-    $('inter-score').textContent = d.storeyScore.toLocaleString('en-US');
+        ? `everyone takes a mark back — and something is waiting on level ${d.level + 1}`
+        : `everyone takes a mark back — level ${d.level + 1} wants more`;
+    $('inter-score').textContent = d.levelScore.toLocaleString('en-US');
     $('inter-quota').textContent = d.quota.toLocaleString('en-US');
-    $('inter-mortar').textContent = d.mortar.toLocaleString('en-US');
-    $('inter-earned').textContent = `+${d.earned} MORTAR EARNED`;
-    $('btn-next-storey').classList.toggle('hidden', !m.isHost() || d.last);
+    $('inter-coins').textContent = d.coins.toLocaleString('en-US');
+    $('inter-earned').textContent = `+${d.earned} COINS EARNED`;
+    $('btn-next-level').classList.toggle('hidden', !m.isHost() || d.last);
     $('inter-wait').classList.toggle('hidden', m.isHost() || d.last);
     $('shop-box').classList.toggle('hidden', !!d.last);
     if (!d.last) this.renderShop2();
     sfx.bless();
   }
 
-  // The Architect's Table. Each player sees their OWN three; the mortar paying
+  // The Architect's Table. Each player sees their OWN three; the coins paying
   // for them is the team's, which is the decision the room actually has.
   renderShop2(evt) {
     const m = this.mirror;
@@ -597,7 +600,7 @@ export class UI {
     if (!run) return;
     const mine = m.myRelics();
     const shop = m.myShop();
-    $('inter-mortar').textContent = run.mortar.toLocaleString('en-US');
+    $('inter-coins').textContent = run.coins.toLocaleString('en-US');
     if (evt && evt.bought && evt.by === m.selfId) sfx.buy();
     else if (evt && evt.rerolled === m.selfId) sfx.ret();
 
@@ -607,7 +610,7 @@ export class UI {
     for (const id of shop) {
       const r = RELICS[id];
       if (!r) continue;
-      const tooDear = run.mortar < r.price;
+      const tooDear = run.coins < r.price;
       box.append(el('button', {
         class: `draft-opt relic-opt r-${r.rarity}`,
         'data-testid': `relic-${id}`,
@@ -621,7 +624,7 @@ export class UI {
       box.append(el('p', { class: 'draft-gauge', text: 'nothing left to sell you' }));
     }
     $('btn-reroll').textContent = `REROLL · ${REROLL_COST}`;
-    $('btn-reroll').disabled = run.mortar < REROLL_COST;
+    $('btn-reroll').disabled = run.coins < REROLL_COST;
     $('relic-held').textContent = mine.length
       ? `YOURS (${mine.length}/${MAX_RELICS}): ${mine.map((id) => RELICS[id]?.name).filter(Boolean).join(' · ')}`
       : `YOURS (0/${MAX_RELICS}): none yet`;
@@ -754,13 +757,11 @@ export class UI {
     const m = this.mirror;
     this.show('scr-over');
     const banked = (d.standings || []).reduce((s, p) => s + p.score, 0).toLocaleString('en-US');
-    document.querySelector('#scr-over .slug').textContent = d.won
-      ? 'EXT. THE SPIRE — DAWN' : 'EXT. THE RUBBLE — DAY';
-    $('over-title').textContent = d.won ? 'CROWNED' : `HEIGHT ${d.height ?? 0}`;
+    $('over-title').textContent = d.won ? 'YOU WIN' : `HEIGHT ${d.height ?? 0}`;
     $('over-sub').textContent = d.won
-      ? `all ${d.storey} storeys — height ${d.height}, ${banked} points banked`
-      : d.storey
-        ? `fell on storey ${d.storey} at height ${d.height} — ${banked} points banked`
+      ? `all ${d.level} levels — height ${d.height}, ${banked} points banked`
+      : d.level
+        ? `fell on level ${d.level} at height ${d.height} — ${banked} points banked`
         : `the tower fell at stage ${d.stage ?? 1} — ${banked} points banked`;
     const ol = $('standings');
     ol.replaceChildren();
@@ -787,7 +788,7 @@ export class UI {
     if (m.tower) {
       this.tower3d.sync(m.tower.rows, (pid) => this.colorFor(pid));
       $('decree').textContent = describeConstraint(m.tower.constraint);
-      $('hdr-slug').textContent = `INT. THE TOWER — STAGE ${m.tower.stage}`;
+      $('hdr-status').textContent = `STAGE ${m.tower.stage}`;
       this.renderTowerHud();
       this.renderTowerInput();
       this.renderShop();
@@ -803,7 +804,7 @@ export class UI {
     this.tower3d.setYaw(Math.sin(now() / 4600) * 8);
     if (!m || m.over || !m.tower) return;
     const t = m.tower;
-    if (t.run && t.run.phase !== 'climb') return; // clock stopped between storeys
+    if (t.run && t.run.phase !== 'climb') return; // clock stopped between levels
     const offer = m.myOffer();
     if (offer) {
       const secs = Math.max(0, Math.ceil((offer.until - now()) / 1000));

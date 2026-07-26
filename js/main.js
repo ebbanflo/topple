@@ -148,7 +148,7 @@ function installDebug() {
     ui,
     // engine-side helpers (host page only)
     setScore: (pid, n) => S.engine && S.engine._debugSetScore(pid, n),
-    setStorey: (n) => S.engine && S.engine._debugSetStorey(n),
+    setLevel: (n) => S.engine && S.engine._debugSetLevel(n),
     setSettings: (patch) => S.engine && S.engine.setSettings(patch),
     engineState: () => S.engine && {
       started: S.engine.started,

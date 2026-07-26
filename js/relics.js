@@ -8,7 +8,7 @@
 //
 // Scoring is two halves, and every relic attaches to exactly one of them:
 //
-//   STONE  the word itself      base + letter values + relic `stone` / `stoneMul`
+//   BASE  the word itself      base + letter values + relic `base` / `baseMul`
 //   MULT   the run around it    stage x combo, + relic `mult`, x relic `xmult`
 //
 // The arithmetic itself lives in decree.js, which owns scoring for the whole
@@ -24,27 +24,27 @@ const RARE = new Set(['j', 'q', 'x', 'z', 'k']);
 const vowelCount = (w) => [...w].filter((c) => VOWELS.has(c)).length;
 const hasDouble = (w) => new Set(w).size !== w.length;
 
-// ctx: { stage, combo, height, sinceLastMs, placedThisStorey:Set, livingCount, storey }
+// ctx: { stage, combo, height, sinceLastMs, placedThisLevel:Set, livingCount, level }
 export const RELICS = {
   vowel_tithe: {
     name: 'VOWEL TITHE', rarity: 'common', price: 4,
-    desc: '+40 stone for every vowel in the word',
-    stone: (w) => 40 * vowelCount(w),
+    desc: '+40 base for every vowel in the word',
+    base: (w) => 40 * vowelCount(w),
   },
   consonant_forge: {
     name: 'CONSONANT FORGE', rarity: 'common', price: 4,
-    desc: '+25 stone for every consonant',
-    stone: (w) => 25 * (w.length - vowelCount(w)),
+    desc: '+25 base for every consonant',
+    base: (w) => 25 * (w.length - vowelCount(w)),
   },
   rare_earth: {
     name: 'RARE EARTH', rarity: 'uncommon', price: 7,
     desc: 'J Q X Z K are worth triple',
-    stone: (w) => [...w].reduce((s, c) => s + (RARE.has(c) ? (LETTER_VALUES[c] || 1) * 2 * TOWER.perLetterValue : 0), 0),
+    base: (w) => [...w].reduce((s, c) => s + (RARE.has(c) ? (LETTER_VALUES[c] || 1) * 2 * TOWER.perLetterValue : 0), 0),
   },
   long_shadow: {
     name: 'LONG SHADOW', rarity: 'uncommon', price: 7,
-    desc: '+150 stone if the word shares no letter with the floor below',
-    stone: (w, ctx) => {
+    desc: '+150 base if the word shares no letter with the floor below',
+    base: (w, ctx) => {
       if (!ctx.below) return 0;
       const below = new Set(ctx.below);
       return [...w].some((c) => below.has(c)) ? 0 : 150;
@@ -67,19 +67,19 @@ export const RELICS = {
   },
   chorus: {
     name: 'CHORUS', rarity: 'rare', price: 11,
-    desc: 'x2 mult once every living player has placed a word this storey',
+    desc: 'x2 mult once every standing player has placed a word this level',
     xmult: (w, ctx) => ((ctx.livingCount > 1 && ctx.placedCount >= ctx.livingCount) ? 2 : 1),
   },
   dead_language: {
     name: 'DEAD LANGUAGE', rarity: 'rare', price: 10,
-    desc: '+0.4 mult for each storey already cleared',
-    mult: (w, ctx) => 0.4 * Math.max(0, (ctx.storey || 1) - 1),
+    desc: '+0.4 mult for each level already cleared',
+    mult: (w, ctx) => 0.4 * Math.max(0, (ctx.level || 1) - 1),
   },
 
   // ---- the tradeoffs: these change rules, not just numbers ----
   scaffold: {
     name: 'SCAFFOLD', rarity: 'uncommon', price: 8,
-    desc: 'your first miss each storey costs no life',
+    desc: 'your first miss each level costs no mark',
     freeMiss: true,
   },
   keystone: {
@@ -89,19 +89,19 @@ export const RELICS = {
   },
   greed: {
     name: 'GREED', rarity: 'uncommon', price: 7,
-    desc: 'x1.5 mult, but the tower hungers 10s sooner',
+    desc: 'x1.5 mult, but the timer runs 10s shorter',
     xmult: () => 1.5,
     hungerDelta: -10000,
   },
   patience: {
     name: 'PATIENCE', rarity: 'common', price: 5,
-    desc: '+12s before the tower hungers, but 20% less stone',
-    stoneMul: () => 0.8,
+    desc: '+12s on the timer, but 20% less base',
+    baseMul: () => 0.8,
     hungerDelta: 12000,
   },
-  blood_mortar: {
-    name: 'BLOOD MORTAR', rarity: 'rare', price: 12,
-    desc: 'a word that breaks the decree is built anyway — and costs a life',
+  blood_pact: {
+    name: 'BLOOD PACT', rarity: 'rare', price: 12,
+    desc: 'a word that breaks the decree is built anyway — and costs a mark',
     forcePlace: true,
   },
   insurance: {
