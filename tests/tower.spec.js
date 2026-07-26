@@ -400,9 +400,11 @@ test.describe('topple', () => {
   test('decree draft: three distinct decrees, any player picks, first tap wins', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
-    // a long draft window so the test drives the choice rather than the timeout
+    // a long draft window so the test drives the choice rather than the timeout.
+    // ASCENT, because the draft is an ASCENT ritual now — CLASSIC and DAILY are
+    // a continuous climb with no seam to stop the room at.
     const code = await hostGame(host, 'ARCHITECT', {
-      ...FAST, rampWords: 1, hungerMs: 600000, draftMs: 20000,
+      ...FAST, mode: 'ascent', rampWords: 1, hungerMs: 600000, draftMs: 20000,
     });
     const guest = await openPage(context);
     await joinGame(guest, code, 'MASON');
@@ -454,7 +456,9 @@ test.describe('topple', () => {
   test('decree draft: nobody picks in time, so the tower picks', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
-    await hostGame(host, 'SLOWPOKE', { ...FAST, rampWords: 1, hungerMs: 600000, draftMs: 600 });
+    await hostGame(host, 'SLOWPOKE', {
+      ...FAST, mode: 'ascent', rampWords: 1, hungerMs: 600000, draftMs: 600,
+    });
     await host.click('#btn-start');
     await waitTower(host);
 
@@ -551,26 +555,22 @@ test.describe('topple', () => {
 
       await page.click('#btn-start');
       await waitTower(page);
-      const t = await towerState(page);
-      // climb into a draft so we compare the dealt OPTIONS too, not just the opener
-      const [w] = findWords(t.constraint, [], 1);
-      for (let i = 0; i < 5; i++) {
+      // climb through two full decree rotations, so we compare the dealt
+      // SEQUENCE and not merely the opener
+      const seq = [describeConstraint((await towerState(page)).constraint)];
+      for (let i = 0; i < 11; i++) {
         const used = await usedWords(page);
         const [next] = findWords((await towerState(page)).constraint, used, 1);
         await climb(page, next);
+        const cur = describeConstraint((await towerState(page)).constraint);
+        if (cur !== seq[seq.length - 1]) seq.push(cur);
       }
-      await page.waitForFunction(() => !!window.__topple.state().tower.offer, null, { polling: 50 });
-      runs.push({
-        opener: describeConstraint(t.constraint),
-        offer: (await towerState(page)).offer.options.map(describeConstraint),
-        page,
-      });
-      expect(w).toBeTruthy();
+      runs.push({ seq, page });
     }
 
     // the whole dealt sequence matches across rooms that never spoke to each other
-    expect(runs[0].opener).toBe(runs[1].opener);
-    expect(runs[0].offer).toEqual(runs[1].offer);
+    expect(runs[0].seq.length).toBeGreaterThan(2); // the decree really did rotate
+    expect(runs[0].seq).toEqual(runs[1].seq);
     // and the run is labelled so people can compare
     await expect(runs[0].page.locator('#hdr-status')).toContainText('TOWER #');
   });
@@ -667,6 +667,17 @@ test.describe('topple', () => {
     expect(run1.level).toBe(2);
     expect(run1.quota).toBeGreaterThan(run0.quota); // level two asks for more
     expect(run1.levelScore).toBe(0);
+
+    // a new level is a clean slate: words spent on level one are playable again
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+    const spentOnOne = (await towerState(host)).rows[0].word;
+    expect(await host.evaluate((w) => window.__topple.engine.usedSinceReset(w), spentOnOne))
+      .toBe(false);
+    const before = (await towerState(host)).height;
+    await climb(host, spentOnOne);
+    const after = await towerState(host);
+    expect(after.height).toBe(before + 1);
+    expect(after.rows[after.rows.length - 1].word).toBe(spentOnOne);
   });
 
   test('ASCENT: clearing the last level wins instead of dropping the tower', async ({ context }) => {
@@ -1080,42 +1091,116 @@ test.describe('topple', () => {
     expect(parseFloat(await width())).toBe(100);
   });
 
-  test('duplicate rule is on-screen only: a word that scrolled off can be replayed, one still visible cannot', async ({ context }) => {
+  test('pause stops the clock for the whole room, and anyone can start it again', async ({ context }) => {
     test.setTimeout(60000);
     const host = await openPage(context);
-    await hostGame(host, 'REPLAY', { ...FAST, rampWords: 999, hungerMs: 600000 });
+    // a short clock, so "it did not strike while paused" is a real claim rather
+    // than a test that finished before the timer could have fired anyway
+    const code = await hostGame(host, 'STOPWATCH', { ...FAST, rampWords: 999, hungerMs: 3000 });
+    const guest = await openPage(context);
+    await joinGame(guest, code, 'BREATHER');
+    await host.waitForFunction(() => window.__topple.state().players.length === 2);
+    const guestId = await guest.evaluate(() => window.__topple.selfId);
+    await startGame(host, [host, guest]);
+    await waitTower(host); await waitTower(guest);
+    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+    const livesAt = async () => (await towerState(host)).lives;
+
+    // the GUEST calls the stop - pausing is not a host privilege
+    await guest.click('#btn-pause');
+    for (const page of [host, guest]) {
+      await page.waitForFunction(() => window.__topple.state().tower.paused, null, { polling: 50 });
+      await expect(page.locator('#ovl-pause')).toBeVisible();
+      expect(await page.evaluate(() => window.__topple.state().inputLocked)).toBe(true);
+    }
+    // and everyone is told who stopped it
+    expect((await towerState(host)).pausedBy).toBe(guestId);
+    await expect(host.locator('#pause-who')).toContainText('BREATHER');
+    await expect(guest.locator('#pause-who')).toContainText('you');
+
+    // nobody can play, host included
+    const before = await towerState(host);
+    await host.evaluate(() => window.__topple.guess('crane'));
+    await host.waitForTimeout(300);
+    expect((await towerState(host)).height).toBe(before.height);
+
+    // sit out more than a full clock: nothing bleeds, because the clock is off
+    await host.waitForTimeout(4500);
+    expect(await livesAt()).toEqual(before.lives);
+    expect((await towerState(host)).paused).toBe(true);
+
+    // the HOST starts it again - either side may
+    await host.click('#btn-resume');
+    for (const page of [host, guest]) {
+      await page.waitForFunction(() => !window.__topple.state().tower.paused, null, { polling: 50 });
+      await expect(page.locator('#ovl-pause')).toBeHidden();
+      expect(await page.evaluate(() => window.__topple.state().inputLocked)).toBe(false);
+    }
+
+    // the resumed clock is a FULL one, not the sliver that was left: a strike
+    // does not land the instant play restarts
+    await host.waitForTimeout(1200);
+    expect(await livesAt()).toEqual(before.lives);
+    // ...but it is running again
+    await host.waitForFunction((ids) => {
+      const l = window.__topple.state().tower.lives;
+      return ids.every((id) => l[id] === 1);
+    }, Object.keys(before.lives), { polling: 50, timeout: 8000 });
+
+    // and words land again (on a long clock now, so the next strike cannot
+    // bury the room out from under the assertion)
+    await host.evaluate(() => {
+      const e = window.__topple.engine;
+      e.tower.hungerMs = 600000;
+      e.armHunger();
+    });
+    await climb(host, 'crane');
+  });
+
+  test('duplicate rule: a word is spent until the decree changes, then it is playable again', async ({ context }) => {
+    test.setTimeout(60000);
+    const host = await openPage(context);
+    // rampWords 2, so the second word of every stage rotates the decree - and
+    // in CLASSIC that rotation IS the boundary the slate wipes at
+    await hostGame(host, 'REPLAY', { ...FAST, rampWords: 2, hungerMs: 600000 });
     await host.click('#btn-start');
     await waitTower(host);
-    await host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+    // the decree itself is not what this test is about, so free it - and free
+    // it again after each rotation, since the engine deals a fresh one
+    const free = () => host.evaluate(() => { window.__topple.engine.tower.constraint = {}; });
+    await free();
 
     const words = GUESSES.filter((w) => /^[a-z]{5}$/.test(w)).slice(0, 30);
     const first = words[0];
-    await climb(host, first);           // floor 1 = `first`, now on screen
+    await climb(host, first);
 
-    // a word still on screen can't be replayed
+    // spent: the same word inside the same decree is refused and costs a mark
     await miss(host, first);
     expect((await towerState(host)).height).toBe(1); // rejected, no growth
 
-    // climb 10 MORE distinct words - `first` scrolls out of the 10-row window
-    for (let i = 1; i <= 10; i++) await climb(host, words[i]);
-    let t = await towerState(host);
-    expect(t.height).toBe(11);
-    const onScreen = t.rows.slice(-10).map((r) => r.word);
-    expect(onScreen).not.toContain(first);
-    expect(await host.evaluate((w) => window.__topple.engine.towerOnScreen(w), first)).toBe(false);
+    // second word of the stage: the decree rotates, so the slate wipes
+    await climb(host, words[1]);
+    await host.waitForFunction(() => window.__topple.state().tower.stage === 2,
+      null, { polling: 50 });
+    await free();
+    const spent = (w) => host.evaluate((x) => window.__topple.engine.usedSinceReset(x), w);
+    expect(await spent(first)).toBe(false); // the rotation wiped the slate
 
-    // so `first` is accepted again - the tower grows, no life lost
+    // `first` is playable again - the tower grows, no mark lost
     const hostId = await host.evaluate(() => window.__topple.selfId);
     const livesBefore = (await towerState(host)).lives[hostId];
     await climb(host, first);
-    t = await towerState(host);
-    expect(t.height).toBe(12);
+    const t = await towerState(host);
+    expect(t.height).toBe(3);
     expect(t.rows[t.rows.length - 1].word).toBe(first); // it's the newest floor
     expect(t.lives[hostId]).toBe(livesBefore);          // no penalty
 
-    // and now that it's back on screen, it's a duplicate again
-    await miss(host, first);
-    expect((await towerState(host)).height).toBe(12);
+    // and it is spent again for the decree it was just played under. Asserted
+    // on the engine rather than by burning a second mark, which at two marks
+    // would bury the solo host and drop the tower mid-test.
+    expect(await spent(first)).toBe(true);
+    // the floors it has scrolled past are irrelevant now - height is not the rule
+    expect(t.rows.map((r) => r.word)).toContain(first);
   });
 
   test('phone: a full stack fits inside the tower band, and typing cannot zoom the page', async ({ context }) => {

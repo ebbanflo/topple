@@ -15,6 +15,7 @@ export const IN = {
   BUY: 'buy',           // {item, target?}
   QUIT: 'quit',         // {} (sender leaves; host handles + mirrors)
   DECREE_PICK: 'pick',  // {index} choose one of the offered decrees
+  PAUSE: 'pause',       // {on} stop/start the whole room's clock
   READY: 'ready',       // {} ASCENT: leave the intermission, start the next level
   RELIC_PICK: 'relic',  // {id} ASCENT: buy one of your offered relics
   REROLL: 'reroll',     // {} ASCENT: pay to redeal your own three
@@ -32,6 +33,7 @@ export const EV = {
   INTERMISSION: 'inter', // ASCENT: {level, quota, levelScore, coins, earned, last, offers, relics}
   RELICS: 'relics',      // ASCENT: {relics:{pid:[id]}, coins, offers:{pid:[id]}, bought?, by?}
   BOSS: 'boss',          // ASCENT: {id, name, short, desc, level} a level-long rule
+  PAUSED: 'paused',      // {on, by} the room is stopped - clock and input both
   TOWER: 'twr',          // {stage, constraint, height, hungerMs, lives, scores, combo, pickedBy?}
   TOWER_WORD: 'twrword', // {pid, word, points, height, combo, stage}
   TOWER_MISS: 'twrmiss', // {pid, word, reason, lives, combo}

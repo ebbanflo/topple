@@ -173,8 +173,8 @@ export class UI {
     $('btn-help').onclick = () => this.showHelp(true);
     $('btn-lobby-quit').onclick = () => this.confirmQuit();
     $('btn-quit').onclick = () => this.confirmQuit();
-    $('btn-pause').onclick = () => this.setPaused(true);
-    $('btn-resume').onclick = () => this.setPaused(false);
+    $('btn-pause').onclick = () => this.mirror && this.mirror.pause(true);
+    $('btn-resume').onclick = () => this.mirror && this.mirror.pause(false);
     $('btn-picker-cancel').onclick = () => this.closePicker();
     $('btn-next-level').onclick = () => { this.mirror.ready(); sfx.ret(); };
     $('btn-reroll').onclick = () => this.mirror.reroll();
@@ -218,9 +218,21 @@ export class UI {
   showDead(msg) { this.show('scr-dead'); $('dead-msg').textContent = msg; }
   showHelp(on) { $('ovl-help').classList.toggle('hidden', !on); }
 
-  setPaused(on) {
+  // Driven by the room's state, not by this screen. `this.paused` is kept in
+  // step because the keydown handler and the tests both read it.
+  setPaused(on, by = null) {
     this.paused = on;
+    const m = this.mirror;
+    const who = by && m ? m.player(by) : null;
+    $('pause-who').textContent = on
+      ? (by === m?.selfId ? 'you stopped the clock' : `${who ? who.name : 'someone'} stopped the clock`)
+      : '';
     $('ovl-pause').classList.toggle('hidden', !on);
+  }
+
+  onPaused(d) {
+    this.setPaused(d.on, d.by);
+    (d.on ? sfx.back : sfx.ret)();
   }
 
   showToast(msg, ms = 2600, kind = null) {
@@ -258,6 +270,7 @@ export class UI {
       case 'intermission': this.onIntermission(d); break;
       case 'relics': this.renderShop2(d); break;
       case 'boss': this.onBoss(d); break;
+      case 'paused': this.onPaused(d); break;
       case 'tower':
         if (d.insured) { this.showToast('INSURANCE — the tower holds at one floor'); sfx.bless(); }
         this.onDecree(d);
@@ -851,6 +864,7 @@ export class UI {
       this.renderTowerInput();
       this.renderShop();
       if (m.myOffer()) this.showDraft(); else this.closeDraft();
+      this.setPaused(m.isPaused(), m.pausedBy());
       if (m.myRun()?.phase === 'intermission' && m.intermission) this.onIntermission(m.intermission);
     }
   }
@@ -862,6 +876,7 @@ export class UI {
     this.tower3d.setYaw(Math.sin(now() / 4600) * 8);
     if (!m || m.over || !m.tower) return;
     const t = m.tower;
+    if (t.paused) return;                        // the room is stopped
     if (t.run && t.run.phase !== 'climb') return; // clock stopped between levels
     const offer = m.myOffer();
     if (offer) {

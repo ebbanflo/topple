@@ -47,11 +47,10 @@ export const TOWER = {
   comboPct: 0.1,           // * combo count, multiplicative
   minWordsPerDecree: 4,    // decree floor before rampWords is factored in (see tower.js genConstraint)
   bonusEveryHeight: 10,    // team-wide bonus mark every N floors climbed
-  // How many of the newest floors are mounted in the 3D scene at once.
-  // Load-bearing in TWO places kept in sync: tower3d.js renders the last
-  // `visibleRows`, AND the engine's duplicate-word rule only rejects words
-  // STILL on screen - a word that has scrolled past this window becomes
-  // playable again.
+  // How many of the newest floors are mounted in the 3D scene at once. Purely
+  // a rendering window now: the duplicate-word rule used to be tied to it, and
+  // "spent until it scrolls off" turned out to be invisible in play. The slate
+  // wipes at the decree change (and the level, in ASCENT) instead.
   visibleRows: 10,
 };
 

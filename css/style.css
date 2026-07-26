@@ -732,6 +732,7 @@ input, button { font-family: inherit; color: inherit; }
 }
 .overlay.opaque { background: var(--paper); backdrop-filter: none; }
 .overlay h2 { font-size: 1.1rem; letter-spacing: .24em; margin: 0; }
+.pause-who { font-size: .68rem; letter-spacing: .18em; color: var(--ink-3); }
 .overlay p { font-size: .8rem; color: var(--ink-2); text-align: center; line-height: 1.6; margin: 0; }
 
 .help-card, .picker-card {

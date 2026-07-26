@@ -178,6 +178,8 @@ function installDebug() {
         stage: S.mirror.tower.stage, height: S.mirror.tower.height,
         combo: S.mirror.tower.combo, constraint: S.mirror.tower.constraint,
         lives: { ...S.mirror.tower.lives },
+        paused: S.mirror.isPaused(),
+        pausedBy: S.mirror.pausedBy(),
         digNeed: S.mirror.digNeed(),
         offer: S.mirror.tower.offer
           ? { options: S.mirror.tower.offer.options.map((c) => ({ ...c })) } : null,

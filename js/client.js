@@ -47,6 +47,7 @@ export class Mirror {
       [EV.INTERMISSION]: (d) => this.onIntermission(d),
       [EV.RELICS]: (d) => this.onRelics(d),
       [EV.BOSS]: (d) => this.onBoss(d),
+      [EV.PAUSED]: (d) => this.onPaused(d),
       [EV.TOWER]: (d) => this.onTower(d),
       [EV.TOWER_WORD]: (d) => this.onTowerWord(d),
       [EV.TOWER_MISS]: (d) => this.onTowerMiss(d),
@@ -126,6 +127,7 @@ export class Mirror {
     t.hungerAt = now() + d.hungerMs;
     t.digNeed = d.digNeed ?? t.digNeed ?? 3;
     t.run = d.run ?? t.run ?? null;
+    if (d.paused !== undefined) { t.paused = d.paused; t.pausedBy = d.pausedBy; }
     this.applyScores(d.scores);
     this.fire('tower', { ...d, fresh: hadStage == null });
   }
@@ -229,6 +231,17 @@ export class Mirror {
     this.fire('relics', d);
   }
 
+  onPaused(d) {
+    const t = this.tower;
+    if (t) { t.paused = d.on; t.pausedBy = d.by; }
+    this.fire('paused', d);
+  }
+
+  pause(on) { this.net.emit(IN.PAUSE, { on: !!on }); }
+
+  isPaused() { return !!(this.tower && this.tower.paused); }
+  pausedBy() { return (this.tower && this.tower.pausedBy) || null; }
+
   onBoss(d) {
     const t = this.tower;
     if (t && t.run) { t.run.boss = d.id; }
@@ -318,6 +331,8 @@ export class Mirror {
         hungerMs: s.tower.hungerMs, lives: { ...s.tower.lives },
         hungerAt: now() + s.tower.hungerMs,
         digNeed: s.tower.digNeed ?? 3,
+        paused: !!s.tower.paused,
+        pausedBy: s.tower.pausedBy || null,
         run: s.tower.run
           ? { ...s.tower.run, offers: s.offers || s.tower.run.offers || {} } : null,
         offer: s.tower.offer
@@ -336,6 +351,7 @@ export class Mirror {
   // Buried players are NOT locked out - digging is the whole point.
   inputLocked() {
     if (!this.started || this.over || !this.tower) return true;
+    if (this.tower.paused) return true;          // the room is stopped
     const r = this.myRun();
     if (r && r.phase !== 'climb') return true; // the intermission is a real stop
     return this.pendingTower > 0 && now() - this.pendingTower < 1500;

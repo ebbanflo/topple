@@ -84,7 +84,7 @@ export const RELICS = {
   },
   keystone: {
     name: 'KEYSTONE', rarity: 'rare', price: 11,
-    desc: 'you may reuse words still standing in the tower',
+    desc: 'you may replay words already used this level',
     allowDuplicate: true,
   },
   greed: {

@@ -40,6 +40,7 @@ export class Engine {
     net.on(IN.BUY, (d, from) => this.onBuy(d, from));
     net.on(IN.DECREE_PICK, (d, from) => this.onDecreePick(d, from));
     net.on(IN.READY, (_d, from) => this.onReady(from));
+    net.on(IN.PAUSE, (d, from) => this.onPause(d, from));
     net.on(IN.RELIC_PICK, (d, from) => this.onRelicPick(d, from));
     net.on(IN.REROLL, (_d, from) => this.onReroll(from));
     net.on(IN.QUIT, (_d, from) => this.onLeave(from, 'quit'));
@@ -176,6 +177,10 @@ export class Engine {
       combo: 0,
       rows: [],                 // {pid, word, points}
       used: new Set(),
+      // words spent since the last reset boundary - the actual duplicate gate
+      sinceReset: new Set(),
+      paused: false,
+      pausedBy: null,
       lives: Object.fromEntries(this.activePlayers().map((p) => [p.id, TOWER.lives])),
       // pid -> {cleared, words:[]} for every player currently at zero lives.
       // Kept in lockstep with `lives` by syncBuried() so the two can never drift.
@@ -231,7 +236,8 @@ export class Engine {
     this.net.emit(EV.TOWER, {
       stage: t.stage, constraint: t.constraint, height: t.height,
       hungerMs: t.hungerMs, lives: { ...t.lives }, scores: this.scoreMap(),
-      combo: t.combo, digNeed: TOWER.digWords, run: this.runInfo(), ...extra,
+      combo: t.combo, digNeed: TOWER.digWords, run: this.runInfo(),
+      paused: t.paused, pausedBy: t.pausedBy, ...extra,
     });
   }
 
@@ -288,6 +294,29 @@ export class Engine {
     if (last) this.timers.next = setTimeout(() => this.crown(), 1200);
   }
 
+  // A real stop, not a privacy screen: the clock halts and nobody can place a
+  // word until somebody starts it again. Anyone may do either - this is a co-op
+  // game played in one room, and needing the host to unpause is a worse bug
+  // than any exploit it prevents.
+  onPause(d, from) {
+    const t = this.tower;
+    if (!t || this.over) return;
+    const on = !!d.on;
+    if (t.paused === on) return;
+    t.paused = on;
+    t.pausedBy = on ? from : null;
+    if (on) {
+      clearTimeout(this.timers.hunger);
+      clearTimeout(this.timers.draft);
+    } else {
+      // resume on a FULL clock rather than the sliver that was left, so pausing
+      // can never be used to bank a nearly-expired timer
+      this.armHunger();
+      if (t.offer) this.armDraft();
+    }
+    this.net.emit(EV.PAUSED, { on, by: t.pausedBy });
+  }
+
   onReady(from) {
     const t = this.tower;
     if (!t || !t.run || t.run.phase !== 'intermission' || this.over) return;
@@ -305,6 +334,7 @@ export class Engine {
     r.placed = new Set();
     r.freeMiss = {};
     r.offers = {};
+    this.resetUsedWords();   // a new level is a clean slate
     this.assignBoss();
     t.constraint = genConstraint(
       t.stage, t.used, t.difficulty, t.rampWords, t.constraint, t.rng);
@@ -417,8 +447,15 @@ export class Engine {
       return;
     }
     t.offer = { options };
+    this.armDraft();
+  }
+
+  // Broadcasts the offer and starts its window. Separate so a resume can hand
+  // the room a fresh full window rather than whatever was left when it stopped.
+  armDraft() {
+    const t = this.tower;
     const ms = this.settings.draftMs ?? DEFAULT_SETTINGS.draftMs;
-    this.net.emit(EV.DECREE_OFFER, { stage: t.stage, options, ms });
+    this.net.emit(EV.DECREE_OFFER, { stage: t.stage, options: t.offer.options, ms });
     clearTimeout(this.timers.draft);
     this.timers.draft = setTimeout(() => this.resolveDraft(0, null), ms);
   }
@@ -445,7 +482,7 @@ export class Engine {
 
   armHunger() {
     clearTimeout(this.timers.hunger);
-    if (!this.tower || this.over) return;
+    if (!this.tower || this.over || this.tower.paused) return;
     this.timers.hunger = setTimeout(() => this.hungerStrike(), this.effectiveHungerMs());
   }
 
@@ -497,19 +534,22 @@ export class Engine {
     return this.activePlayers().every((p) => (this.tower.lives[p.id] ?? 0) <= 0);
   }
 
-  // A word only counts as a duplicate while it's STILL visible in the tower
-  // (the newest TOWER.visibleRows floors - what tower3d.js actually mounts).
-  // Once a floor scrolls past that window it's forgotten, so an early word can
-  // be played again later. t.used keeps every word ever placed, but only to
-  // feed genConstraint's survivability check - it is NOT the duplicate gate.
-  towerOnScreen(word) {
+  // A word is a duplicate only until the slate is wiped. The slate wipes at a
+  // boundary the players can SEE and remember - the level in ASCENT, the decree
+  // change in CLASSIC/DAILY - rather than at the old rule, which was "once this
+  // floor has scrolled off the visible ten". That was invisible in play: you
+  // could not tell whether a word was still spent without counting slabs.
+  //
+  // t.used keeps every word ever placed, but only to feed genConstraint's
+  // survivability check. It is NOT the duplicate gate.
+  usedSinceReset(word) {
     const t = this.tower;
-    if (!t) return false;
-    const start = Math.max(0, t.rows.length - TOWER.visibleRows);
-    for (let i = start; i < t.rows.length; i++) {
-      if (t.rows[i].word === word) return true;
-    }
-    return false;
+    return !!t && t.sinceReset.has(word);
+  }
+
+  // Called wherever the slate legitimately wipes.
+  resetUsedWords() {
+    if (this.tower) this.tower.sinceReset = new Set();
   }
 
   // Team-wide bonus mark (milestone every N floors, or the T-O-W-E-R easter
@@ -547,6 +587,7 @@ export class Engine {
     if (!t || this.over) return;
     const p = this.player(from);
     if (!p || !p.connected) return;
+    if (t.paused) return;                        // the room is stopped
     if (t.run && t.run.phase !== 'climb') return; // the intermission is a real stop
     const word = this.unwrapWord(d.x);
 
@@ -564,8 +605,8 @@ export class Engine {
       return;
     }
 
-    if (this.towerOnScreen(word) && !grants(mine, 'allowDuplicate')) {
-      return this.towerMiss(from, word, 'already in the tower');
+    if (this.usedSinceReset(word) && !grants(mine, 'allowDuplicate')) {
+      return this.towerMiss(from, word, t.run ? 'already used this level' : 'already used this decree');
     }
     // BLOOD PACT builds the illegal word anyway and takes the life for it -
     // a miss that becomes a floor, which is the whole trade.
@@ -585,6 +626,7 @@ export class Engine {
 
     // accepted: the tower grows
     t.used.add(word);
+    t.sinceReset.add(word);
     t.height += 1;
     t.combo += 1;
     t.wordsInStage += 1;
@@ -633,7 +675,16 @@ export class Engine {
     if (t.wordsInStage >= t.rampWords && !t.offer) {
       t.stage += 1;
       t.wordsInStage = 0;
-      this.offerDecrees();
+      if (t.run) {
+        // ASCENT drafts. CLASSIC/DAILY are a continuous climb with no seams to
+        // stop at, so a modal three-card choice every few words got in the way.
+        this.offerDecrees();
+      } else {
+        this.resetUsedWords(); // in CLASSIC the decree change IS the boundary
+        t.constraint = genConstraint(
+          t.stage, t.used, t.difficulty, t.rampWords, t.constraint, t.rng);
+        this.broadcastTower();
+      }
     }
   }
 
@@ -720,7 +771,7 @@ export class Engine {
     if (!dig) return;
     const bad = !isValidGuess(word) ? 'not a word'
       : dig.words.includes(word) ? 'already dug with that'
-        : this.towerOnScreen(word) ? 'already in the tower'
+        : this.usedSinceReset(word) ? 'already used' 
           : !matchesConstraint(word, t.constraint) ? 'breaks the decree' : null;
     if (bad) {
       this.net.emit(EV.DIG, {
@@ -860,6 +911,7 @@ export class Engine {
         rows: this.tower.rows.slice(-40),
         digNeed: TOWER.digWords,
         offer: this.tower.offer ? { options: this.tower.offer.options } : null,
+        paused: this.tower.paused, pausedBy: this.tower.pausedBy,
         run: this.runInfo(),
         offers: this.tower.run ? { ...this.tower.run.offers } : null,
         buried: Object.fromEntries(Object.entries(this.tower.buried)

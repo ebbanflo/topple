@@ -93,7 +93,7 @@
     <header class="game-header">
       <div id="hdr-status" class="hdr-status"></div>
       <div class="hdr-btns">
-        <button id="btn-pause" class="icon-btn" title="Pause (privacy screen)">II</button>
+        <button id="btn-pause" class="icon-btn" title="Stop the clock for everyone">II</button>
         <button id="btn-help" class="icon-btn" title="How to play">?</button>
         <button id="btn-quit" class="icon-btn" title="Quit to menu">&times;</button>
       </div>
@@ -180,7 +180,8 @@
   <!-- ============ OVERLAYS ============ -->
   <div id="ovl-pause" class="overlay opaque hidden">
     <h2>PAUSED</h2>
-    <p>your screen is hidden &mdash; the tower keeps hungering for everyone else.</p>
+    <p id="pause-who" class="pause-who"></p>
+    <p>the clock is stopped and nobody can play. anyone can start it again.</p>
     <button id="btn-resume" class="btn-big">RESUME</button>
   </div>
 
@@ -194,24 +195,29 @@
       <p>A rule that every word must satisfy: use a letter &rarr; a letter pinned to a slot &rarr;
       banned letters &rarr; vowel counts &rarr; and stranger twists at HARD (a rare letter, matching
       first/last letters, "no E", "ends in K", a double letter, no vowels at all). It changes every
-      <b>3 / 5 / 10</b> words &mdash; the host's call. <b>LEVEL</b> sets its difficulty:
+      <b>3 / 5 / 10</b> words &mdash; the host's call. <b>DECREE LEVEL</b> sets its difficulty:
       EASY / MED / HARD hold that band all game, <b>RAMP</b> climbs easy&rarr;hard and then stays
       there. Every decree is vetted at generation time to be clearable with words you'd actually
       recognise.</p>
-      <h3>LIVES</h3>
-      <p>Three each, capped at five. You lose one for a word that isn't real, a word that breaks
-      the decree, or a word <b>still visible in the tower</b> (scrolled-off floors become playable
-      again). The <b>hunger bar</b> drains constantly &mdash; if it empties, <em>everyone</em>
-      bleeds a life and the combo resets. When every player is down, the tower falls.</p>
+      <h3>MARKS</h3>
+      <p><b>Two each</b>, and two is the ceiling &mdash; bonuses heal you, they don't stockpile.
+      You lose one for a word that isn't real, a word that breaks the decree, or a word you've
+      <b>already used</b>. The <b>timer</b> drains constantly &mdash; if it empties,
+      <em>everyone</em> loses a mark and the combo resets. When every player is down, the tower
+      falls.</p>
+      <h3>USED WORDS</h3>
+      <p>A word is spent for as long as its decree lasts. The slate wipes clean the moment the
+      decree changes &mdash; and in ASCENT, the moment you clear a <b>level</b> &mdash; so
+      everything you've already played is yours to play again.</p>
       <h3>SCORING</h3>
       <p>Each floor scores base &times; letter values &times; <b>stage</b>, inflated by your
       <b>combo</b> (every consecutive good word, team-wide). Numbers are meant to be absurd.</p>
       <h3>ASCENT</h3>
       <p>The structured run. Eight <b>levels</b>, each demanding a score <b>quota</b>. Meet it and
-      the tower holds while you catch your breath &mdash; everyone gets a heart back, anyone buried
+      the tower holds while you catch your breath &mdash; everyone gets a mark back, anyone buried
       is lifted out, and you bank <b>coins</b>. Then the next level asks for more. There's no
-      second clock: the hunger bar is the pressure, and you fail a level by getting buried, not by
-      running out of turns. Clear the eighth and the tower is <b>crowned</b> &mdash; the only way to
+      second clock: the timer is the pressure, and you fail a level by getting buried, not by
+      running out of turns. Clear the eighth and the tower <b>stands</b> &mdash; the only way to
       actually win.</p>
       <h3>RELICS</h3>
       <p>At every intermission each player is dealt <b>three relics</b> of their own, bought with
@@ -219,30 +225,35 @@
       Up to five each, for the whole run. Some are plain numbers (<b>VOWEL TITHE</b>,
       <b>RARE EARTH</b>); the interesting ones are trades. <b>GREED</b> multiplies your score and
       starves the tower ten seconds sooner. <b>PATIENCE</b> does the reverse. <b>KEYSTONE</b> lets
-      you reuse words still standing. <b>BLOOD PACT</b> builds a decree-breaking word anyway and
-      takes a life for it. <b>INSURANCE</b> catches the first collapse. Rerolling your three costs
-      2 coins.</p>
+      you replay words you've already used. <b>BLOOD PACT</b> builds a decree-breaking word anyway
+      and takes a mark for it. <b>INSURANCE</b> catches the first collapse. Rerolling your three
+      costs 2 coins.</p>
       <h3>DAILY</h3>
       <p>Same tower for everybody, everywhere, all day. The decrees are dealt from the date rather
       than from chance, and the settings are locked so the runs are actually comparable &mdash;
       compare heights with your friends and argue about it. Rolls over at <b>UTC midnight</b>, so a
       room split across timezones still plays the same tower.</p>
-      <h3>THE DRAFT</h3>
-      <p>Every time the decree changes, the tower deals you <b>three</b> instead of imposing one.
+      <h3>THE DRAFT &mdash; ASCENT ONLY</h3>
+      <p>In <b>ASCENT</b>, every decree change deals you <b>three</b> instead of imposing one.
       <b>Any</b> player can pick and the <b>first tap decides for the room</b>, so argue fast. The
-      old decree stays live while you're choosing and the hunger bar keeps draining &mdash;
-      dithering costs blood. Nobody picks in time? The tower picks for you.</p>
+      old decree stays live while you're choosing and the timer keeps draining &mdash; dithering
+      costs blood. Nobody picks in time? The tower picks for you. CLASSIC and DAILY don't draft:
+      they're one continuous climb, and a card choice every few words got in the way.</p>
       <h3>BURIED &mdash; DIG OUT</h3>
       <p>Hitting zero lives does <b>not</b> put you out. You're <b>buried</b>, and you keep typing
       &mdash; but your words dig instead of build. Land <b>three</b> real words that obey the
-      current decree and you climb out with one life. Dig words score nothing, add no floors and
+      current decree and you climb out with one mark. Dig words score nothing, add no floors and
       don't touch the combo, and a wrong one costs you nothing (you're already at zero). A teammate
       still standing can spend <b>2,000</b> points on a <b>✦ ROPE</b> to clear one of your three
       for you. The tower only falls when <em>everybody</em> is buried at once.</p>
-      <h3>BLESSINGS</h3>
-      <p>Every <b>10th floor</b>, the whole team gets a bonus heart (including anyone at zero). And
-      if the last five floors happen to spell <b>T-O-W-E-R</b> straight down any one column, the
-      tower blesses you with another.</p>
+      <h3>BONUSES</h3>
+      <p>Every <b>10th floor</b>, the whole team gets a mark back (including anyone at zero). And
+      if the last five floors happen to spell <b>T-O-W-E-R</b> straight down any one column,
+      that's another. Neither can push you past two.</p>
+      <h3>PAUSE</h3>
+      <p>The <b>II</b> button stops the clock for the <em>whole room</em> &mdash; nobody can play
+      until somebody starts it again, and anybody can. Play picks back up on a full timer, so
+      pausing can't be used to bank a nearly-empty one.</p>
       <button id="btn-help-close" class="btn-big">GOT IT</button>
     </div>
   </div>

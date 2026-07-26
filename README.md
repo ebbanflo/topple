@@ -1,8 +1,8 @@
 # TOPPLE
 
 A co-op word tower for 1–4 players. Stack real 5-letter words into a shared
-structure; every word must obey the current **decree**. Misses cost lives, the
-hunger clock never stops, and eventually the tower comes down.
+structure; every word must obey the current **decree**. Misses cost marks, the
+timer keeps draining, and eventually the tower comes down.
 
 Room-code multiplayer. No accounts, no downloads, no build step — a static site
 served straight off GitHub Pages, with Supabase Realtime carrying the room.
@@ -15,25 +15,25 @@ served straight off GitHub Pages, with Supabase Realtime carrying the room.
 
 **ASCENT** — the structured run. Eight **levels**, each demanding a score
 **quota**. Meet it and the tower holds while the team catches its breath —
-everyone gets a heart back, anyone buried is lifted out, and you bank **coins**.
+everyone gets a mark back, anyone buried is lifted out, and you bank **coins**.
 Then the next level asks for more. There is deliberately no second clock: the
-hunger bar is the pressure, and you fail a level by getting buried, not by
-running out of turns. Clear the eighth and the tower is **crowned** — the only
+timer is the pressure, and you fail a level by getting buried, not by
+running out of turns. Clear the eighth and the tower **stands** — the only
 way to actually win.
 
 Levels **3, 6 and 8** bring a **boss decree** — a rule that warps the whole
 level on top of whatever the team drafted. **THE CENSOR** forbids the letter E.
 **THE GLUTTON** halves the clock. **THE TWIN** demands every word share exactly
 two letters with the floor below. **THE TAX** builds cheap words anyway and takes
-a life for them. **THE SILENCE** hands the tower one voice at a time.
+a mark for them. **THE SILENCE** hands the tower one voice at a time.
 
 At each intermission every player is dealt **three relics of their own**, bought
 from the team's shared **coins** — so the room has to decide whose build is
 worth funding. Five each, for the whole run. Some are plain numbers; the
 interesting ones are trades: **GREED** multiplies your score and starves the
 tower ten seconds sooner, **PATIENCE** does the reverse, **KEYSTONE** lets you
-reuse words still standing, **BLOOD PACT** builds a decree-breaking word
-anyway and takes a life for it, **INSURANCE** catches the first collapse.
+replay words already used this level, **BLOOD PACT** builds a decree-breaking
+word anyway and takes a mark for it, **INSURANCE** catches the first collapse.
 
 **DAILY** — the same tower for everybody, everywhere, all day. Decrees are dealt
 from a seed derived from the UTC date rather than from chance, and the settings
@@ -45,35 +45,45 @@ room split across timezones still plays the same tower.
 The host opens a room and reads out the 4-character code (or shares the invite
 link). Up to three others join. Solo is a legitimate run.
 
-- **The draft** — every stage change deals the team three decrees instead of
-  imposing one. Any player may pick and the first tap wins; the old decree stays
-  live while you decide and the hunger bar keeps draining, so dithering costs
-  blood. Nobody picks in time and the tower picks for you.
+- **The draft (ASCENT only)** — every decree change deals the team three
+  decrees instead of imposing one. Any player may pick and the first tap wins;
+  the old decree stays live while you decide and the timer keeps draining, so
+  dithering costs blood. Nobody picks in time and the tower picks for you.
+  CLASSIC and DAILY are one continuous climb with no seam to stop the room at,
+  so a modal three-card choice every few words only got in the way.
 - **Decree** — the rule every word must satisfy. Use a letter, a letter pinned
   to a slot, banned letters, vowel counts, and stranger twists at HARD: a rare
   letter, matching first/last letters, a double letter, "no E", "ends in K", no
   vowels at all. It rotates every 3 / 5 / 10 words (host's choice).
-- **Level** — `EASY` / `MED` / `HARD` hold one difficulty band all game;
+- **Decree level** — `EASY` / `MED` / `HARD` hold one difficulty band all game;
   `RAMP` climbs easy → hard and then stays there. Every generated decree is
   vetted to be clearable with words people actually recognise, and never
   repeats back-to-back.
-- **Lives** — three each, capped at five. A word that isn't real, breaks the
-  decree, or is still visible in the tower costs one. Floors that scroll past
-  the visible ten become playable again.
+- **Marks** — two each, and two is the ceiling: bonuses heal, they don't
+  stockpile. A word that isn't real, breaks the decree, or has already been
+  used costs one.
+- **Used words** — a word is spent for as long as its decree lasts. The slate
+  wipes at the decree change, and in ASCENT at the level. The old rule tied it
+  to the ten floors still on screen, which was invisible in play — you could
+  not tell whether a word was spent without counting slabs.
 - **Buried** — hitting zero does *not* put you out. You keep typing, but your
   words dig instead of build: three real words obeying the live decree and you
-  climb out with one life. Dig words score nothing, add no floors and don't
+  climb out with one mark. Dig words score nothing, add no floors and don't
   touch the combo, and a wrong one costs nothing (you're already at zero). The
   tower falls only when *everyone* is buried at once.
-- **Hunger** — a shared clock. Let it empty and *everyone* loses a life and the
-  combo resets. All players down = the tower falls.
+- **The timer** — a shared clock. Let it empty and *everyone* loses a mark and
+  the combo resets. All players down = the tower falls.
+- **Pause** — stops the clock for the whole room; nobody can place a word until
+  somebody starts it again, and anybody may. Play resumes on a full timer, so a
+  pause can never bank a nearly-expired one.
 - **Score** — base × letter values × stage, inflated by the team-wide combo.
   Deliberately absurd numbers.
 - **Rope ✦ (2,000)** — anyone still standing can buy away one of a buried
-  teammate's three dig words. Helping costs points, never time: nothing in
-  TOPPLE pauses the clock.
-- **Blessings** — a bonus heart for the whole team every 10th floor, and
-  another if the last five floors happen to spell `T-O-W-E-R` down a column.
+  teammate's three dig words. Helping costs points, never time: the clock runs
+  through every rescue.
+- **Bonuses** — a mark back for the whole team every 10th floor, and another if
+  the last five floors happen to spell `T-O-W-E-R` down a column. Neither can
+  push anyone past two.
 
 ---
 
@@ -83,7 +93,7 @@ Host-authoritative, with a thin mirror on every client.
 
 | file | role |
 | --- | --- |
-| `js/engine.js` | Runs **only in the host's browser**. Owns every life, score, combo and the hunger clock, and judges every word — as base if you're standing, as rubble if you're buried. |
+| `js/engine.js` | Runs **only in the host's browser**. Owns every mark, score, combo and the timer, and judges every word — as base if you're standing, as rubble if you're buried. |
 | `js/client.js` | `Mirror` — the state every peer (host included) renders from. Asserts at startup that it handles every host broadcast in the registry. |
 | `js/protocol.js` | The single registry of wire events. Adding a host event without a mirror handler throws immediately. |
 | `js/transport.js` | Swappable transport: Supabase Realtime broadcast + presence, or `BroadcastChannel` for tests (`?t=local`). |
@@ -99,9 +109,9 @@ Words travel lightly obfuscated so other players' typing isn't casual
 network-tab reading. That is obfuscation, not cryptography — the channel is
 public.
 
-Burial is **derived from lives, never stored twice**: `Engine.syncBuried()` and
+Burial is **derived from marks, never stored twice**: `Engine.syncBuried()` and
 `Mirror.syncBuried()` reconcile the two after any change, which is why bonus
-hearts, hunger strikes and digs all compose without special cases — a heart that
+marks, timer strikes and digs all compose without special cases — a mark that
 lifts someone off zero un-buries them for free.
 
 ### The tower
@@ -112,8 +122,9 @@ stay selectable text rather than a texture. The world translates down as the
 stack grows, which *is* the camera climbing. When the run ends the floors
 buckle from the base and tumble out of frame.
 
-Ten floors stay mounted at once. That number is load-bearing in two places kept
-in sync: the renderer's window, and the engine's duplicate-word rule.
+Ten floors stay mounted at once. That is a rendering window and nothing more —
+the duplicate-word rule used to hang off it too, and tying a game rule to a
+camera turned out to be a mistake players could not see.
 
 ### Layout contract
 
@@ -167,7 +178,7 @@ climb, so the honest way to tune it is to play it. `?debug=1` exposes
 `setLevel(n)` so the eighth level can be tested without grinding the first
 seven. For reference, level 1 currently falls in about seven words.
 
-Coins earn rate (`ASCENT.coinsBase` plus overshoot and hearts in hand) and
+Coins earn rate (`ASCENT.coinsBase` plus overshoot and marks in hand) and
 relic prices in `relics.js` want the same treatment.
 
 ### Infrastructure
@@ -201,9 +212,9 @@ npm test
 Playwright drives the real site over `LocalTransport` — real engine, real
 mirror, real DOM, no network. The suite covers the decree generator's
 survivability and recognizability floors, the no-repeat rule, solo and co-op
-runs, misses, hunger, burial and digging out, rope purchases, both blessings,
-the scroll-off duplicate rule, the decree draft (first-pick-wins and the
-timeout), and the layout contract above. `rng.spec.js` runs entirely in node:
+runs, misses, the timer, burial and digging out, rope purchases, both bonuses,
+the duplicate rule and where its slate wipes, the room-wide pause, the decree
+draft (first-pick-wins and the timeout), and the layout contract above. `rng.spec.js` runs entirely in node:
 seeded determinism, UTC day rollover, and proof that seeding doesn't smuggle a
 decree past the survivability gates.
 
